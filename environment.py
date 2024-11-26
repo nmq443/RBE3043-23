@@ -10,7 +10,7 @@ class UR10Env(gym.Env):
     def __init__(self, urdf_path, render=False):
         super().__init__()
         self.render = render
-        self.time_step = 1 / 240  # Simulation timestep
+        self.time_step = 1 / 10  # Simulation timestep
         self.max_steps = 1000    # Maximum steps per episode
         self.current_step = 0
 
@@ -88,7 +88,8 @@ class UR10Env(gym.Env):
         p.disconnect(self.client)
 
 if __name__ == "__main__":
-    urdf_path = "ur10.urdf"  # Update with your URDF path
+    urdf_path = "/home/hoang/rl/RBE3043-23/urdf/ur10_robot.urdf"  # Update with your URDF path
+    
     env = UR10Env(urdf_path, render=True)
     obs = env.reset()
 
