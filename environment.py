@@ -3,7 +3,6 @@ import pybullet_data
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
-import os
 import time
 
 class UR10Env(gym.Env):
@@ -24,9 +23,20 @@ class UR10Env(gym.Env):
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0, 0, -9.81)
         self.plane = p.loadURDF("plane.urdf")
+        self.table = p.loadURDF(
+            fileName="table/table.urdf",
+            basePosition=[0, 0, 0],
+            useFixedBase=True,
+        )
+        self.table_height = 0.62 # Approximate height of the table
 
         # Load UR10 robot
-        self.ur10 = p.loadURDF(urdf_path, basePosition=[0, 0, 0], useFixedBase=True)
+        self.ur10_base_position = [0, 0, self.table_height]
+        self.ur10 = p.loadURDF(
+            fileName=urdf_path,
+            basePosition=self.ur10_base_position,
+            useFixedBase=True
+        )
 
         # Get joint info
         self.num_joints = p.getNumJoints(self.ur10)
@@ -34,18 +44,40 @@ class UR10Env(gym.Env):
         self.joint_limits = [p.getJointInfo(self.ur10, i)[8:10] for i in self.joint_indices]
 
         # Define action and observation spaces
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(6,), dtype=np.float32)  # Control 6 joints
+        self.action_space = spaces.Box(
+            low=-1.0,
+            high=1.0,
+            shape=(6,),
+            dtype=np.float32
+        )  # Action space: 6 continuous actions for Δx, Δy, Δz, Δroll, Δpitch, Δyaw
+
+        obs_dim = 6 + 7 + 3 # 6 joint positions, 7 object pose, 3 target position
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(self.num_joints * 2,), dtype=np.float32
+            low=-np.inf,
+            high=np.inf,
+            shape=(obs_dim, ),
+            dtype=np.float32
         )
 
     def reset(self):
         self.current_step = 0
         for i, (lower, upper) in enumerate(self.joint_limits):
             joint_angle = np.random.uniform(lower, upper)
-            p.resetJointState(self.ur10, i, joint_angle)
+            p.resetJointState(
+                self.ur10,
+                i,
+                joint_angle
+            )
 
-        return self._get_observation()
+        self.object_id = p.loadURDF(
+            fileName="cube.urdf",
+            basePosition=[0.5, 1, 0],
+            globalScaling=0.1
+        )
+
+        p.changeDynamics(self.object_id, -1, mass=1.0, lateralFriction=0.5, restitution=0.1)
+
+        return self._get_observation(), {}
 
     def step(self, action):
         self.current_step += 1
@@ -88,14 +120,15 @@ class UR10Env(gym.Env):
         p.disconnect(self.client)
 
 if __name__ == "__main__":
-    urdf_path = "/home/hoang/rl/RBE3043-23/urdf/ur10_robot.urdf"  # Update with your URDF path
+    urdf_path = "urdf/ur10_robot.urdf"  # Update with your URDF path
     
     env = UR10Env(urdf_path, render=True)
     obs = env.reset()
-
-    for _ in range(100):
+    rewards = []
+    for i in range(10000):
         action = env.action_space.sample()
         obs, reward, done, info = env.step(action)
+        rewards.append(reward)
         if done:
             break
 
