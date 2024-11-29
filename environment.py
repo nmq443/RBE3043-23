@@ -12,7 +12,6 @@ class UR10Env(gym.Env):
         self.time_step = 1 / 10  # Simulation timestep
         self.max_steps = 1000    # Maximum steps per episode
         self.current_step = 0
-
         # Connect to PyBullet
         if self.render:
             self.client = p.connect(p.GUI)
@@ -69,15 +68,54 @@ class UR10Env(gym.Env):
                 joint_angle
             )
 
-        self.object_id = p.loadURDF(
-            fileName="cube.urdf",
-            basePosition=[0.5, 1, 0],
-            globalScaling=0.1
-        )
-
-        p.changeDynamics(self.object_id, -1, mass=1.0, lateralFriction=0.5, restitution=0.1)
+        # self.object_id = p.loadURDF(
+        #     fileName="cube.urdf",
+        #     basePosition=[0.5, 1, 0],
+        #     globalScaling=0.1
+        # )
+        colors = [
+            [1, 0, 0, 1],  # Red
+            [0, 1, 0, 1],  # Green
+            [0, 0, 1, 1],  # Blue
+            [1, 1, 0, 1],  # Yellow
+        ]
+        self.cube_ids = []
+        cube_positions = self._generate_cube_positions()
+        for i, position in enumerate(cube_positions):
+            color = colors[i // 3]  # Assign color based on index
+            cube_id = self._create_colored_cube(position, color)
+            self.cube_ids.append(cube_id)
+        # p.changeDynamics(self.object_id, -1, mass=1.0, lateralFriction=0.5, restitution=0.1)
 
         return self._get_observation(), {}
+    def _generate_cube_positions(self):
+        """Generate positions for 12 cubes randomly placed on the table."""
+        positions = []
+        for _ in range(12):
+            x = np.random.uniform(-0.2, 0.2)  # Table surface x range
+            y = np.random.uniform(-0.3, 0.3)  # Table surface y range
+            z = self.table_height + 0.05  # Slightly above table
+            positions.append([x, y, z])
+        return positions
+
+    def _create_colored_cube(self, position, color):
+        """Create a colored cube at the specified position."""
+        visual_shape_id = p.createVisualShape(
+            shapeType=p.GEOM_BOX,
+            halfExtents=[0.025, 0.025, 0.025],  # Small cube size
+            rgbaColor=color
+        )
+        collision_shape_id = p.createCollisionShape(
+            shapeType=p.GEOM_BOX,
+            halfExtents=[0.025, 0.025, 0.025]
+        )
+        cube_id = p.createMultiBody(
+            baseMass=1.0,
+            baseCollisionShapeIndex=collision_shape_id,
+            baseVisualShapeIndex=visual_shape_id,
+            basePosition=position
+        )
+        return cube_id
 
     def step(self, action):
         self.current_step += 1
