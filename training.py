@@ -1,4 +1,4 @@
-from hybrid_actor_critic_architechture import *
+from hppo import *
 import torch
 import torch.optim as optim
 
