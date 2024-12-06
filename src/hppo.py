@@ -9,12 +9,22 @@ class HybridActorCritic(nn.Module):
     def __init__(
             self,
             obs_dim,
-            discrete_actions,
-            continuous_actions
+            discrete_action_dim=4,
+            continuous_params_dim=[1, 1, 1, 1]
     ):
+        """
+
+        :param obs_dim: [obj_pos(3), target_pos(3), ee_pos(3), ] (20)
+        :param discrete_action_dim: MoveToObj(velocity), OpenGripper(
+        velocity),
+        CloseGripper(velocity),
+        MoveObjToTarget(velocity)
+        :param continuous_action_dim: dimension of parameters of discrete
+        actions
+        """
         self.obs_dim = obs_dim
-        self.discrete_actions = discrete_actions
-        self.continuous_actions = continuous_actions
+        self.discrete_action_dim = discrete_action_dim
+        self.continuous_params_dim = continuous_params_dim
 
         # Share based layers for features extraction
         # (256, 256, 128, 64)
@@ -41,19 +51,39 @@ class HybridActorCritic(nn.Module):
         # We will then use softmax distribution to choose the discrete action
         self.discrete_actor = nn.Linear(
             in_features=64,
-            out_features=discrete_actions
+            out_features=self.discrete_action_dim
         )
 
         # Continuous actor network
         # Output of continuous actor network are mean and standard deviation
-        # Of a Gaussian distribution for the continuous actions
-        self.continuous_actor_mean = nn.Linear(
-            in_features=64,
-            out_features=continuous_actions
-        )
-        self.continuous_actor_std = nn.Linear(
-            in_features=64,
-            out_features=continuous_actions
+        # Of a Gaussian distribution for the continuous params
+        self.continuous_actor = nn.ModuleList(
+            nn.ModuleDict({
+                "mean": nn.Sequential(
+                    nn.Linear(
+                        in_features=64,
+                        out_features=64
+                    ),
+                    nn.ReLU(),
+                    nn.Linear(
+                        in_features=64,
+                        out_features=param_dim
+                    )
+                ),
+                "std": nn.Sequential(
+                    nn.Linear(
+                        in_features=64,
+                        out_features=param_dim
+                    ),
+                    nn.ReLU(),
+                    nn.Linear(
+                        in_features=64,
+                        out_features=param_dim
+                    ),
+                    nn.Softplus()  # Ensures positive standard deviations
+                )
+            })
+            for param_dim in self.continuous_params_dim
         )
 
         # Critic network
@@ -71,44 +101,36 @@ class HybridActorCritic(nn.Module):
         # Discrete actions (logits)
         discrete_logits = self.discrete_actor(features)
 
-        # Continuous actions (mean and std)
-        mean = self.continuous_actor_mean(features)
-        # Use softplus to ensure std is positive
-        std = F.softplus(self.continuous_actor_std(features))
+        continuous_params = [
+            {
+                "mean": head["mean"](features),
+                "std": head["std"](features)
+            }
+            for head in self.continuous_heads
+        ]
 
         # Value estimation
         value = self.critic_fc(features)
 
-        return discrete_logits, mean, std, value
+        return discrete_logits, continuous_params, value
 
 
 def select_action(network, state):
     state = torch.FloatTensor(state).unsqueeze(0)
 
     # Forward pass
-    discrete_logits, mean, std, value = network(state)
+    discrete_logits, continuous_params, value = network(state)
 
     # Discrete action
     discrete_distribution = distribution.Categorical(logits=discrete_logits)
     discrete_action = discrete_distribution.sample()
 
-    # Continuous action
-    continuous_distribution = distribution.Normal(mean, std)
-    continuous_action = continuous_distribution.sample()
-    # Normalized the parameters
-    continuous_action = torch.clamp(
-        input=continuous_action,
-        min=0.0,
-        max=1.0
-    )
+    # Continuous params
+    mean = continuous_params[discrete_action]["mean"]
+    std = continuous_params[discrete_action]["std"]
+    continuous_action = torch.normal(mean, std)
 
-    # Log probabilities for gradient updates
-    log_prob_discrete = discrete_distribution.log_prob(discrete_action)
-    log_prob_continuous = continuous_distribution.log_prob(continuous_action).sum(dim=-1)
-
-    log_prob = log_prob_discrete + log_prob_continuous
-
-    return discrete_action.item(), continuous_action.squeeze().detach().numpy(), log_prob, value
+    return discrete_action, continuous_params, value
 
 
 def compute_loss(
