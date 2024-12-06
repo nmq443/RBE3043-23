@@ -71,6 +71,10 @@ class MyPickAndPlace(Task):
         )
 
     def reset(self):
+        """TODO
+        Make more complicated objects (multiple shapes for example ...)
+        """
+
         # Reset the object position randomly
         object_position = self._sample_object()
         self.sim.set_base_pose(
@@ -105,23 +109,47 @@ class MyPickAndPlace(Task):
         Observation consists of the transform and velocities of the object. The transform contains position and rotation/orientation, and the velocities are velocity and angular velocity
         :return: The observation in a `numpy.ndarray` type
         """
+
+        # TODO: add transform for target, end-effector/gripper
+
         object_position = self.sim.get_base_position("object")
         object_rotation = self.sim.get_base_orientation("object")
         object_velocity = self.sim.get_base_velocity("object")
-        object_angular_velocity = self.sim.get_base_angular_velocity("object")
-        observation = np.concatenate([object_position, object_rotation, object_velocity, object_angular_velocity])
+        # object_angular_velocity = self.sim.get_base_angular_velocity("object")
+        # observation = np.concatenate([object_position, object_rotation, object_velocity, object_angular_velocity])
+        observation = np.concatenate([object_position, object_rotation])
         return observation
 
     def get_achieved_goal(self) -> np.ndarray:
         """
         :return: The achieved goal
         """
+        # TODO: make a better achieved goal
         object_position = self.sim.get_base_position("object")
         return np.array(object_position)
 
+    def is_terminated(self) -> bool:
+        """
+        is_terminated returns whether or not the episode is
+        in a terminal state; this can be due to:
+        1. All objects have been removed somehow from the env -> object
+        exists in environment or not?
+        2. The timer has hit 0
+
+        It is not an indication of success
+        """
+
+        # TODO: re-implement this method later
+
+        # return all(obj.removed for obj in self.goal.values())
+        return False
+
     def is_success(self, achieved_goal: np.ndarray, desired_goal: np.ndarray, info: Dict[str, Any] = {}) -> np.ndarray:
-        d = distance(achieved_goal, desired_goal)
-        return np.array(d < self.distance_threshold, dtype=bool)
+        # d = distance(achieved_goal, desired_goal)
+        # return np.array(d < self.distance_threshold, dtype=bool)
+        # return self.is_terminated()
+
+        return np.array([self.is_terminated()], dtype="bool")
 
     def compute_reward(self, achieved_goal: np.ndarray, desired_goal: np.ndarray,
                        info: Dict[str, Any] = {}) -> np.ndarray:
@@ -144,6 +172,10 @@ class MyRobotTaskEnv(RobotTaskEnv):
         robot = Panda(sim, block_gripper=False, base_position=np.array([-0.4, 0, 0]))
         task = MyPickAndPlace(sim, use_blocking_bar=use_blocking_bar)
         super().__init__(robot, task)
+
+    def step(self):
+        # TODO: step() return obs, reward, terminated, truncated, info
+        return None
 
 from utils import add_world_frame
 
