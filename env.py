@@ -12,10 +12,12 @@ class MyPickAndPlace(Task):
             self,
             sim: PyBullet,
             distance_threshold: float = 0.05,
+            use_blocking_bar=True
     ):
         super().__init__(sim)
         self.distance_threshold = distance_threshold
         self.object_size = 0.04
+        self.use_blocking_bar = use_blocking_bar
         with self.sim.no_rendering():
             self._create_scene()
 
@@ -51,15 +53,16 @@ class MyPickAndPlace(Task):
             rgba_color=np.array([0.1, 0.9, 0.1, 0.4])
         )
 
-        # Create a blocking bar from the object to the target
-        self.sim.create_box(
-            body_name="blocker",
-            half_extents=np.array([0.01, 0.3, 0.02]),
-            mass=0,
-            ghost=False,
-            position=np.array([0.1, 0.0, 0.01]),
-            rgba_color=np.array([0.0, 0.0, 0.0, 0.8])
-        )
+        if self.use_blocking_bar:
+            # Create a blocking bar from the object to the target
+            self.sim.create_box(
+                body_name="blocker",
+                half_extents=np.array([0.01, 0.3, 0.02]),
+                mass=0,
+                ghost=False,
+                position=np.array([0.1, 0.0, 0.01]),
+                rgba_color=np.array([0.0, 0.0, 0.0, 0.8])
+            )
 
         # Limit object to be created to specific areas
         self.object_position_limits: Tuple[Tuple[float, float], Tuple[float, float]] = (
@@ -134,18 +137,19 @@ class MyRobotTaskEnv(RobotTaskEnv):
 
     def __init__(
             self,
-            render_mode
+            render_mode,
+            use_blocking_bar=True
     ):
         sim = PyBullet(render_mode=render_mode)
         robot = Panda(sim, block_gripper=False, base_position=np.array([-0.4, 0, 0]))
-        task = MyPickAndPlace(sim)
+        task = MyPickAndPlace(sim, use_blocking_bar=use_blocking_bar)
         super().__init__(robot, task)
 
 from utils import add_world_frame
 
 def test_env():
 
-    env = MyRobotTaskEnv(render_mode="human")
+    env = MyRobotTaskEnv(render_mode="human", use_blocking_bar=False)
     add_world_frame()
     observation, info = env.reset()
 
