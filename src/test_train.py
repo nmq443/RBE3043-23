@@ -1,4 +1,4 @@
-from test_env_copy import *
+from test_env import *
 from model import DiscreteActor, ContinuousActor, Critic
 import torch
 from trainer import Trainer
@@ -33,9 +33,9 @@ trainer = Trainer(
     discrete_actor=d_actor,
     continuous_actor=c_actor,
     critic=critic,
-    timesteps=20,
-    timesteps_per_batch=20,
-    max_timesteps_per_episode=75,
+    timesteps=2_000_000,
+    timesteps_per_batch=5_000,
+    max_timesteps_per_episode=750,
 )
 
 trainer.train()
