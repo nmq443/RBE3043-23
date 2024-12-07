@@ -1,3 +1,4 @@
+
 from experiment_env import *
 from model import DiscreteActor, ContinuousActor, Critic
 import torch
@@ -36,7 +37,6 @@ def test_model():
     print(f"Discrete distribution: {discrete_dist}")
     print(f"Continuous param: {continuous_params}")
     print(f"V: {V}")
-
 def init():
     env = SorterEnv(
         observation_type=0,
