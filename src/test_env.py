@@ -710,7 +710,12 @@ class My_Arm_RobotEnv(RobotTaskEnv):
         self, action: np.ndarray
     ) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
         score_prior = self.task.score
-        self.robot.set_action(action)
+
+        if isinstance(action, dict):
+            discrete_action = action["discrete"]
+            continuous_action = action["continuous"]
+            self.robot.set_action(continuous_action)
+
         self.sim.step()
         observation = self._get_obs()
         score_after = self.task.score

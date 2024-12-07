@@ -229,6 +229,8 @@ class Trainer:
     def run_episode(self):
         """Run a single episode."""
         observation, _ = self.env.reset()
+        if isinstance(observation, dict):
+            observation = observation["observation"]
 
         timesteps = 0
         observations = []
@@ -242,8 +244,6 @@ class Trainer:
             timesteps += 1
 
             observations.append(observation)
-            if isinstance(observation, dict):
-                observation = observation['observation']
 
             current_discrete_dist = self.discrete_actor(observation)
             current_discrete_action = current_discrete_dist.sample()
@@ -394,11 +394,17 @@ class Trainer:
 
         # ---- Continuous Actor ----
         current_continuous_params = self.continuous_actor(observations)
-        mean = current_continuous_params[discrete_actions.item()][
-            'mean']
-        std = current_continuous_params[discrete_actions.item()][
-            'std']
-        current_continuous_dist = torch.distributions.Normal(mean, std)
+        # mean = current_continuous_params[discrete_actions.item()][
+        #     'mean']
+        means = torch.stack([current_continuous_params[
+            int(discrete_action.item())]['mean']
+                 for discrete_action in discrete_actions], dim=0)
+        # std = current_continuous_params[discrete_actions.item()][
+        #     'std']
+        stds = torch.stack([current_continuous_params[
+            int(discrete_action.item())]['std']
+                 for discrete_action in discrete_actions], dim=0)
+        current_continuous_dist = torch.distributions.Normal(means, stds)
         current_continuous_log_prob = current_continuous_dist.log_prob(
             continuous_actions)
         continuous_ratio = torch.exp(
@@ -435,10 +441,14 @@ class Trainer:
                 np.array(discrete_actions, dtype=np.float32))
             continuous_actions = Tensor(
                 np.array(continuous_actions, dtype=np.float32))
-            discrete_log_probabilities = Tensor(
-                np.array(discrete_log_probabilities, dtype=np.float32))
-            continuous_log_probabilities = Tensor(
-                np.array(continuous_log_probabilities, dtype=np.float32))
+            # discrete_log_probabilities = Tensor(
+            #     np.array(discrete_log_probabilities, dtype=np.float32))
+            discrete_log_probabilities = torch.stack(
+                discrete_log_probabilities, dim=0)
+            # continuous_log_probabilities = Tensor(
+            #     np.array(continuous_log_probabilities, dtype=np.float32))
+            continuous_log_probabilities = torch.stack(
+                continuous_log_probabilities, dim=0)
             rewards = Tensor(np.array(rewards, dtype=np.float32))
 
             # Perform training steps
