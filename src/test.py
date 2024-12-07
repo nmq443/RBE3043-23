@@ -1,7 +1,7 @@
-from panda_gym.envs.core import RobotTaskEnv
 from experiment_env import *
 from model import DiscreteActor, ContinuousActor, Critic
 import torch
+from training import Trainer
 
 MOVE = 0
 PICK = 1
@@ -37,67 +37,33 @@ def test_model():
     print(f"Continuous param: {continuous_params}")
     print(f"V: {V}")
 
-def run_episode():
-    env = SorterEnv(render_mode='human', observation_type=0)
-
-    """Run a single episode."""
+def init():
+    env = SorterEnv(
+        observation_type=0,
+        render_mode='rgb_array',
+    )
     obs, _ = env.reset()
-    print(f"Observation type: {type(obs)}")
-    obs_dim = obs['observation'].shape[0]
+    obs_dim = len(obs['observation'])
+    d_actor = DiscreteActor(obs_dim=obs_dim, output_dim=discrete_dim)
+    c_actor = ContinuousActor(obs_dim=obs_dim,
+                              continuous_param_dim=continuous_dim)
+    critic = Critic(obs_dim=obs_dim)
 
-    discrete = DiscreteActor(obs_dim, discrete_dim)
-    continuous = ContinuousActor(obs_dim, continuous_dim)
-    critic = Critic(obs_dim)
+    trainer = Trainer(
+        env=env,
+        discrete_actor=d_actor,
+        continuous_actor=c_actor,
+        critic=critic,
+        timesteps=2000,
+        timesteps_per_batch=200,
+        max_timesteps_per_episode=750,
+    )
 
-    timesteps = 0
-    observations = []
-    discrete_actions = []
-    continuous_params = []
-    discrete_log_probs = []
-    continuous_log_probs = []
-    rewards = []
+    return trainer
 
-    while timesteps < 100000:
-        timesteps += 1
+if __name__ == '__main__':
+    trainer = init()
+    # trainer.run_episode()
 
-        observations.append(obs)
-        if isinstance(obs, dict):
-            obs = obs['observation']
-        current_discrete_dist = discrete(obs)
-        current_discrete_action = current_discrete_dist.sample()
-        current_discrete_log_prob = current_discrete_dist.log_prob(
-            current_discrete_action)
-        current_discrete_action = current_discrete_action.detach().numpy()
-
-        current_continuous_params = continuous(obs)
-        mean = current_continuous_params[current_discrete_action.item()][
-            'mean']
-        std = current_continuous_params[current_discrete_action.item()][
-            'std']
-        current_continuous_dist = torch.distributions.Normal(mean, std)
-        current_continuous_action = current_continuous_dist.sample()
-        continuous_log_prob = current_continuous_dist.log_prob(
-            current_continuous_action)
-        current_continuous_action = current_continuous_action.detach(
-
-        ).numpy()
-
-        action = {
-            'discrete': current_discrete_action,
-            'continuous': current_continuous_action
-        }
-        obs, reward, terminated, _, _ = env.step(action)
-
-        discrete_actions.append(current_discrete_action)
-        discrete_log_probs.append(current_discrete_log_prob)
-
-        continuous_params.append(current_continuous_action)
-        continuous_log_probs.append(continuous_log_prob)
-
-        rewards.append(reward)
-
-        print(f"Timestep: {timesteps}")
-        if terminated:
-            break
-
-run_episode()
+    rewards = [1, 2, 3, 4, 5]
+    print(trainer.calculate_discounted_reward(rewards))

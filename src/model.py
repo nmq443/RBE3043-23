@@ -10,7 +10,7 @@ class DiscreteActor(Module):
     def __init__(
             self,
             obs_dim: int = 20,
-            output_size: int = 3
+            output_dim: int = 3
     ):
         """Init the discrete actor. This network estimate a distribution of
         discrete actions.
@@ -28,7 +28,7 @@ class DiscreteActor(Module):
             LeakyReLU(),
             Linear(128, 64),
             LeakyReLU(),
-            Linear(64, output_size),
+            Linear(64, output_dim),
         )
 
     def forward(self, input: Union[np.ndarray, Tensor, List]) -> Union[
