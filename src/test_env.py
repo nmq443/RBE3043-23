@@ -404,7 +404,7 @@ class Pick_And_Place(Task):
             observation = self._get_img()
         else:
             observation = self._get_poses_output()
-        self.score = reward
+        self.score += reward
         return observation, reward
 
     def _get_closest_object(self, ee_position: np.array) -> Tuple[Optional[TargetObject], float]:
