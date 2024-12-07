@@ -1,57 +1,34 @@
 import torch
 from torch import Tensor
-from torch.nn import Sequential, Module, Linear, ModuleList
+from torch.nn import (Sequential, Module, Linear, ModuleList, Softplus,
+                      ModuleDict, ModuleList)
 from torch.nn import LeakyReLU
 import numpy as np
-
 from typing import Union, List
-
-
-class StateEncoder(Module):
-    """Shared state encoder network for both discrete and continuous actor"""
-
-    def __init__(
-            self,
-            input_size
-    ):
-        super(StateEncoder, self).__init__()
-
-        self.fc = Sequential(
-            Linear(input_size, 256),
-            LeakyReLU(),
-            Linear(256, 128),
-            LeakyReLU(),
-            Linear(128, 64),
-            LeakyReLU(),
-        )
-
-    def forward(self, x: Tensor) -> Tensor:
-        return self.fc(x)
-
 
 class DiscreteActor(Module):
     def __init__(
             self,
-            input_size: int = 20,
-            output_size: int = 4
+            obs_dim: int = 20,
+            output_size: int = 3
     ):
+        """Init the discrete actor. This network estimate a distribution of
+        discrete actions.
+        Args:
+            obs_dim (int, optional): Dimension of observation space. Defaults to 20.
+            output_size (int, optional): Output size or number of discrete
+            actions. Defaults to 3 (Move, Pick, Place)
+        """
         super(DiscreteActor, self).__init__()
 
-        # Determine our input size
-        self.input_size = input_size
-        # Determine our output size
-        self.output_size = output_size
-
-        # Create our model head - input -> some output layer before splitting to
-        # different outputs for mu and sigma
         self.model = Sequential(
-            Linear(256, 256),
+            Linear(obs_dim, 256),
             LeakyReLU(),
             Linear(256, 128),
             LeakyReLU(),
             Linear(128, 64),
             LeakyReLU(),
-            Linear(64, self.output_size),
+            Linear(64, output_size),
         )
 
     def forward(self, input: Union[np.ndarray, Tensor, List]) -> Union[
@@ -67,7 +44,7 @@ class DiscreteActor(Module):
         # return distribution
         output = self.model(input_tensor)
         output_dist = torch.distributions.Categorical(logits=output)
-        return output
+        return output_dist
 
     def save(self, filepath: str):
         torch.save({
@@ -82,40 +59,33 @@ class DiscreteActor(Module):
 class ContinuousActor(Module):
     def __init__(
             self,
-            input_size: int = 20,
-            continuous_action_dim: int = [3, 1, 3, 1]
+            obs_dim: int = 20,
+            continuous_param_dim: List = [3, 1, 3, 1]
     ):
+        """Init the continuous actor. This network predicts mean and std for
+        the continuous parameters.
+        Args:
+            obs_dim (int, optional): Dimension of observation space. Defaults to 20.
+            continuous_param_dim (int, optional): Dimension of continuous
+            parameter. Defaults to [1, 1, 1, 1], meaning each discrete action only has 1 parameter
+        """
         super(ContinuousActor, self).__init__()
 
-        # Determine our input size
-        self.input_size = input_size
-
-        # Create our model head - input -> some output layer before splitting to
-        # different outputs for mu and sigma
-        self.mean_model = ModuleList(
-            Sequential(
-                Linear(256, 256),
-                LeakyReLU(),
-                Linear(256, 128),
-                LeakyReLU(),
-                Linear(128, 64),
-                LeakyReLU(),
-                Linear(64, param_dim),
-            )
-            for param_dim in continuous_action_dim
-        )
-
-        self.std_model = ModuleList(
-            Sequential(
-                Linear(256, 256),
-                LeakyReLU(),
-                Linear(256, 128),
-                LeakyReLU(),
-                Linear(128, 64),
-                LeakyReLU(),
-                Linear(64, param_dim),
-            )
-            for param_dim in continuous_action_dim
+        self.model = ModuleList(
+            ModuleDict({
+                "mean": Sequential(
+                    Linear(obs_dim, 64),
+                    LeakyReLU(),
+                    Linear(64, param_dim)
+                ),
+                "std": Sequential(
+                    Linear(obs_dim, 64),
+                    LeakyReLU(),
+                    Linear(64, param_dim),
+                    Softplus()  # Ensures positive standard deviations
+                )
+            })
+            for param_dim in continuous_param_dim
         )
 
     def forward(self, input: Union[np.ndarray, Tensor, List]):
@@ -127,10 +97,15 @@ class ContinuousActor(Module):
         else:
             input_tensor = input
 
-        # return distribution
-        means = [head(input_tensor) for head in self.mean_model]
-        stds = [head(input_tensor) for head in self.std_model]
-        return torch.distributions.Normal(means, stds)
+        continuous_params = [
+            {
+                "mean": head["mean"](input_tensor),
+                "std": head["std"](input_tensor)
+            }
+            for head in self.model
+        ]
+
+        return continuous_params
 
 
     def save(self, filepath: str):
@@ -146,16 +121,13 @@ class ContinuousActor(Module):
 class Critic(Module):
     def __init__(
             self,
-            input_size: int
+            obs_dim: int
     ):
+        """Init the critic network. This network estimate V(s)"""
         super(Critic, self).__init__()
 
-        # Our score can be unbounded as a value from
-        # some -XXX, +XXX, so we don't scale it w/ an activation
-        # function
-
         self.model = Sequential(
-            Linear(input_size, 128),
+            Linear(obs_dim, 128),
             LeakyReLU(),
             Linear(128, 64),
             LeakyReLU(),
@@ -172,12 +144,6 @@ class Critic(Module):
                 np.array(input).astype("float32"))
         else:
             input_tensor = input
-
-        # activation1 = F.relu(self.layer1(input_tensor))
-        # activation2 = F.relu(self.layer2(activation1))
-        # output = self.layer3(activation2)
-
-        # return output
 
         return self.model(input_tensor)
 
