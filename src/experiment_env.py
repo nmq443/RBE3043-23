@@ -631,16 +631,12 @@ class SorterEnv(RobotTaskEnv):
             discrete_action = action['discrete']
             continuous_action = action['continuous']
 
-            print(f"Discrete action: {discrete_action}")
-            print(f"Continuous action: {continuous_action}")
-
             if discrete_action == MOVE:
                 force = 0
                 force = np.array([force])
                 action = np.concatenate([continuous_action, force])
                 self.robot.set_action(action)
             elif discrete_action == PICK:
-                print(f"Parameters: {continuous_action}")
                 force = 1000
                 force = np.array([force])
                 # dx, dy, dz, force
