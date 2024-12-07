@@ -324,13 +324,8 @@ class Pick_And_Place(Task):
 
     def get_obs(self) -> Tuple[np.array, float]:
         """
-        get_obs will determine if any objects collided and need to be removed,
-        and adjust the score and reward accordingly. It will then return an observation
-        along with the reward for this step.
-
-        The observation, depending on the observation type, will be:
-            - OBSERVATION_POSES: a series of pose values for objects and end effector.
-            - OBSERVATION_IMAGE: a rendered image from the camera perspective.
+        Determines if any objects collided, adjusts score and reward accordingly,
+        and returns an observation along with the reward for this step.
 
         Returns:
             np.array: The observation at this step.
@@ -338,7 +333,37 @@ class Pick_And_Place(Task):
         """
         reward = 0.0  # Initialize the reward
 
-        # 1️⃣ **Check for floor collisions. Remove any colliding objects.**
+        # Handle floor collisions
+        reward += self._handle_floor_collisions()
+
+        # Handle goal collisions
+        reward += self._handle_goal_collisions()
+
+        # Reward for moving towards the closest object
+        reward += self._reward_closer_to_object()
+
+        # Reward for successful grasping
+        reward += self._reward_grasping_success()
+
+        # Reward for moving an object towards its goal
+        reward += self._reward_object_towards_goal()
+
+        # Penalize time-step to encourage efficiency
+        reward += STEP_PENALTY
+
+        # Ensure that each goal stays in position
+        self.set_sorter_positions()
+
+        # Return the observation and the reward
+        if self.observation_type == OBSERVATION_IMAGE:
+            observation = self._get_img()
+        else:
+            observation = self._get_poses_output()
+        return observation, reward
+
+    def _handle_floor_collisions(self) -> float:
+        """Checks for floor collisions and penalizes accordingly."""
+        reward = 0.0
         floor_id = self.sim._bodies_idx["plane"]
         for object_key in self.goal:
             if self.goal[object_key].removed:
@@ -346,11 +371,15 @@ class Pick_And_Place(Task):
 
             object_id = self.goal[object_key].id
             if self.check_collision(object_id, floor_id):
-                reward -= FLOOR_COLLISION_PENALTY  # Penalize for object hitting the floor
+                reward += FLOOR_COLLISION_PENALTY
                 self.sim.physics_client.removeBody(object_id)
                 self.goal[object_key].removed = True
+                print(f"Object {object_key} dropped to the floor")
+        return reward
 
-        # 2️⃣ **Check for collisions between the goals and objects.**
+    def _handle_goal_collisions(self) -> float:
+        """Checks for collisions between objects and goals, rewarding or penalizing as necessary."""
+        reward = 0.0
         for object_key in self.goal:
             if self.goal[object_key].removed:
                 continue
@@ -366,46 +395,43 @@ class Pick_And_Place(Task):
 
                     # Reward or penalize based on correct/incorrect sorting
                     if CORRECT_SORTS[goal] == object.shape:
-                        reward += DROP_SUCCESS_REWARD  # Reward for dropping in the correct goal
+                        reward += DROP_SUCCESS_REWARD
+                        print(f"Object {object_key} correctly sorted into {goal}")
                     else:
-                        reward -= WRONG_DROP_PENALTY  # Penalty for dropping in the wrong goal
+                        reward += WRONG_DROP_PENALTY
+                        print(f"Object {object_key} incorrectly sorted into {goal}")
+        return reward
 
-        # 3️⃣ **Check for movement towards the closest object.**
+    def _reward_closer_to_object(self) -> float:
+        """Rewards the agent for moving closer to the nearest object."""
         ee_position = self.robot.get_ee_position()
         closest_object, closest_distance = self._get_closest_object(ee_position)
         if closest_object:
             distance_to_object = np.linalg.norm(ee_position - self.get_object_pose(closest_object)[:3])
-            distance_delta = closest_distance - distance_to_object  # Check if we moved closer
-            distance_delta = abs(distance_delta)
-            reward += MOVE_TOWARD_OBJECT_REWARD * distance_delta  # Reward for moving closer to the object
+            distance_delta = abs(closest_distance - distance_to_object)
+            return MOVE_TOWARD_OBJECT_REWARD * distance_delta
+        return 0.0
 
-        # 4️⃣ **Check for successful grasping.**
-        if self._is_object_grasped(closest_object):
-            reward += GRASP_SUCCESS_REWARD  # Reward for successful grasp
+    def _reward_grasping_success(self) -> float:
+        """Rewards the agent for successfully grasping an object."""
+        closest_object, _ = self._get_closest_object(self.robot.get_ee_position())
+        if closest_object and self._is_object_grasped(closest_object):
+            print(f"Object {closest_object} successfully grasped")
+            return GRASP_SUCCESS_REWARD
+        return 0.0
 
-        # 5️⃣ **Check if the object is moving towards the goal.**
+    def _reward_object_towards_goal(self) -> float:
+        """Rewards the agent for moving objects closer to their goals."""
+        closest_object, closest_distance = self._get_closest_object(self.robot.get_ee_position())
         if closest_object and not closest_object.removed:
-            # print(closest_object.shape)
-            object_pos = self.get_object_pose(closest_object)[:3]  # (x, y, z) position of the object
-            goal_pos = self.sorter_positions[GOALS[closest_object.shape]]  # Position of the target goal
+            object_pos = self.get_object_pose(closest_object)[:3]
+            goal_pos = self.sorter_positions[GOALS[closest_object.shape]]
             distance_to_goal = np.linalg.norm(object_pos - goal_pos)
-            distance_delta = closest_distance - distance_to_goal
-            if distance_delta > 0:
-                reward += MOVE_OBJECT_TO_GOAL_REWARD * distance_delta  # Reward for moving object towards goal
+            distance_delta = abs(closest_distance - distance_to_goal)
+            print("Distance: ", distance_delta)
+            return MOVE_OBJECT_TO_GOAL_REWARD * distance_delta
 
-        # 6️⃣ **Penalize small time-step to encourage efficiency.**
-        reward -= STEP_PENALTY
-
-        # 7️⃣ **Ensure that each goal stays in position (collision checking side-effect).**
-        self.set_sorter_positions()
-
-        # 8️⃣ **Return the observation and the reward.**
-        if self.observation_type == OBSERVATION_IMAGE:
-            observation = self._get_img()
-        else:
-            observation = self._get_poses_output()
-        self.score += reward
-        return observation, reward
+        return 0.0
 
     def _get_closest_object(self, ee_position: np.array) -> Tuple[Optional[TargetObject], float]:
         """ Return the closest object to the end-effector (EE). """
@@ -654,6 +680,7 @@ class My_Arm_RobotEnv(RobotTaskEnv):
             render_pitch=-30,
             render_roll=0.0,
         )
+        self.total_score = 0
         self.sim.place_visualizer(
             target_position=np.zeros(3), distance=0.9, yaw=45, pitch=-30
         )
@@ -663,6 +690,7 @@ class My_Arm_RobotEnv(RobotTaskEnv):
             self.robot.reset()
             self.task.reset()
         observation = self._get_obs()
+        self.total_score = 0
         return observation, None
 
     def _get_obs(self) -> Dict[str, np.ndarray]:
@@ -695,6 +723,9 @@ class My_Arm_RobotEnv(RobotTaskEnv):
         info = {"is_success": terminated}
         step_penalty = STEP_PENALTY
         reward = (score_after - score_prior) + step_penalty
+        self.total_score += reward
+        print("Score: ",self.total_score)
+        print("reward: ", reward)
         return observation, reward, terminated, truncated, info
 
 
@@ -716,16 +747,16 @@ CORRECT_SORTS = {
 }
 
 
-FLOOR_PENALTY = -50
-# WRONG_SORT_REWARD = 25
-# SORT_REWARD = 100
-WRONG_SORT_REWARD = 200
-SORT_REWARD = 500
+# FLOOR_PENALTY = -50
+# # WRONG_SORT_REWARD = 25
+# # SORT_REWARD = 100
+# WRONG_SORT_REWARD = 200
+# SORT_REWARD = 500
 
-MOVE_TOWARD_OBJECT_REWARD = -0.1     # Reward for moving EE toward the object
+MOVE_TOWARD_OBJECT_REWARD = -1.0     # Reward for moving EE toward the object
 GRASP_SUCCESS_REWARD = 50.0        # Reward for successful grasp
-MOVE_OBJECT_TO_GOAL_REWARD = -0.1   # Reward for moving object toward goal
-DROP_SUCCESS_REWARD = 100.0       # Reward for successfully placing in correct goal
+MOVE_OBJECT_TO_GOAL_REWARD = -1.0   # Reward for moving object toward goal
+DROP_SUCCESS_REWARD = 50.0       # Reward for successfully placing in correct goal
 WRONG_DROP_PENALTY = -20.0        # Penalty for placing object in wrong goal
 FLOOR_COLLISION_PENALTY = -50.0   # Penalty for dropping the object on the floor
 STEP_PENALTY = -0.1               # Small penalty to encourage efficiency
@@ -750,6 +781,7 @@ def test_env():
         observation, reward, terminated, truncated, info = env.step(action)
 
         if terminated or truncated:
+            print("Run 1 episode")
             observation, info = env.reset()
 
 
