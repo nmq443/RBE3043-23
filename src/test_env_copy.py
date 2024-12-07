@@ -1,16 +1,15 @@
+import time
+from utils import add_world_frame
 import math
 from math import pi
 from random import choice, uniform
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Dict, Tuple, Optional
 
 import numpy as np
 from panda_gym.envs.core import RobotTaskEnv, Task
 from panda_gym.envs.robots.panda import Panda
 from panda_gym.pybullet import PyBullet
 
-MOVE = 0
-PICK = 1
-PLACE = 2
 
 class TargetObject:
     """
@@ -36,13 +35,13 @@ class TargetObject:
         self.removed = removed
 
 
-class SorterTask(Task):
+class Pick_And_Place(Task):
     def __init__(
         self,
         sim: PyBullet,
         observation_type: int,
         robot: Panda,
-        objects_count: int = 5,
+        objects_count: int = 3,
         img_size: Tuple[int, int] = (256, 256),
         blocker_bar: bool = True,
     ):
@@ -265,7 +264,8 @@ class SorterTask(Task):
                 else:
                     break
 
-            self.goal[object] = TargetObject(id, name, shape, size, position, color)
+            self.goal[object] = TargetObject(
+                id, name, shape, size, position, color)
 
     def check_collision(self, object1: str, object2: str) -> bool:
         """
@@ -325,32 +325,39 @@ class SorterTask(Task):
         # Clear our score
         self.score = 0.0
 
-    def get_obs(self) -> np.array:
+    def get_obs(self) -> Tuple[np.array, float]:
         """
         get_obs will determine if any objects collided and need to be removed,
-        and adjust the score as expected. It will then return an observation,
-        which, depending on the observation type, will be:
-            OBSERVATION_POSES: will be a series of values. See _get_obs_poses
-                for an explanation of this output.
-            OBSERVATION_IMAGE: will be the simulation render from the camera
-                angle.
+        and adjust the score and reward accordingly. It will then return an observation
+        along with the reward for this step.
+
+        The observation, depending on the observation type, will be:
+            - OBSERVATION_POSES: a series of pose values for objects and end effector.
+            - OBSERVATION_IMAGE: a rendered image from the camera perspective.
+
+        Returns:
+            np.array: The observation at this step.
+            float: The reward for this step.
         """
-        # First check for floor collisions. Remove any colliding objects.
+        reward = 0.0  # Initialize the reward
+
+        # 1️⃣ **Check for floor collisions. Remove any colliding objects.**
         floor_id = self.sim._bodies_idx["plane"]
         for object_key in self.goal:
             if self.goal[object_key].removed:
                 continue
+
             object_id = self.goal[object_key].id
             if self.check_collision(object_id, floor_id):
-                self.score += FLOOR_PENALTY
+                reward -= FLOOR_COLLISION_PENALTY  # Penalize for object hitting the floor
                 self.sim.physics_client.removeBody(object_id)
                 self.goal[object_key].removed = True
 
-        # Then check for collisions between the goals and a given target.
-        # Remove any colliding targets.
+        # 2️⃣ **Check for collisions between the goals and objects.**
         for object_key in self.goal:
             if self.goal[object_key].removed:
                 continue
+
             for goal in GOALS:
                 object = self.goal[object_key]
                 object_id = object.id
@@ -360,27 +367,82 @@ class SorterTask(Task):
                     self.sim.physics_client.removeBody(object_id)
                     self.goal[object_key].removed = True
 
+                    # Reward or penalize based on correct/incorrect sorting
                     if CORRECT_SORTS[goal] == object.shape:
-                        self.score += SORT_REWARD
+                        reward += DROP_SUCCESS_REWARD  # Reward for dropping in the correct goal
                     else:
-                        self.score += WRONG_SORT_REWARD
+                        reward -= WRONG_DROP_PENALTY  # Penalty for dropping in the wrong goal
 
-        # Ensure that each goal hasn't moved; this is a consequence of the
-        # collision checking we do
+        # 3️⃣ **Check for movement towards the closest object.**
+        ee_position = self.robot.get_ee_position()
+        closest_object, closest_distance = self._get_closest_object(
+            ee_position)
+        if closest_object:
+            distance_to_object = np.linalg.norm(
+                ee_position - self.get_object_pose(closest_object)[:3])
+            distance_delta = closest_distance - distance_to_object  # Check if we moved closer
+            if distance_delta > 0:
+                # Reward for moving closer to the object
+                reward += MOVE_TOWARD_OBJECT_REWARD * distance_delta
+
+        # 4️⃣ **Check for successful grasping.**
+        if self._is_object_grasped(closest_object):
+            reward += GRASP_SUCCESS_REWARD  # Reward for successful grasp
+
+        # 5️⃣ **Check if the object is moving towards the goal.**
+        if closest_object and not closest_object.removed:
+            # print(closest_object.shape)
+            # (x, y, z) position of the object
+            object_pos = self.get_object_pose(closest_object)[:3]
+            # Position of the target goal
+            goal_pos = self.sorter_positions[GOALS[closest_object.shape]]
+            distance_to_goal = np.linalg.norm(object_pos - goal_pos)
+            distance_delta = closest_distance - distance_to_goal
+            if distance_delta > 0:
+                # Reward for moving object towards goal
+                reward += MOVE_OBJECT_TO_GOAL_REWARD * distance_delta
+
+        # 6️⃣ **Penalize small time-step to encourage efficiency.**
+        reward -= STEP_PENALTY
+
+        # 7️⃣ **Ensure that each goal stays in position (collision checking side-effect).**
         self.set_sorter_positions()
 
+        # 8️⃣ **Return the observation and the reward.**
         if self.observation_type == OBSERVATION_IMAGE:
-            return self._get_img()
+            observation = self._get_img()
         else:
-            return self._get_poses_output()
+            observation = self._get_poses_output()
+
+        return observation, reward
+
+    def _get_closest_object(self, ee_position: np.array) -> Tuple[Optional[TargetObject], float]:
+        """ Return the closest object to the end-effector (EE). """
+        closest_object = None
+        closest_distance = float('inf')
+        for object in self.goal.values():
+            if object.removed:
+                continue
+            object_pos = self.get_object_pose(object)[:3]  # x, y, z position
+            distance = np.linalg.norm(ee_position - object_pos)
+            if distance < closest_distance:
+                closest_object = object
+                closest_distance = distance
+        return closest_object, closest_distance
+
+    def _is_object_grasped(self, object) -> bool:
+        """ Check if the gripper has grasped an object. """
+        return self.robot.get_fingers_width() < GRASP_THRESHOLD
 
     def get_object_pose(self, object: TargetObject) -> np.array:
         object_position = self.sim.get_base_position(object.name)
         object_rotation = self.sim.get_base_rotation(object.name)
         object_velocity = self.sim.get_base_velocity(object.name)
-        object_angular_velocity = self.sim.get_base_angular_velocity(object.name)
+        object_angular_velocity = self.sim.get_base_angular_velocity(
+            object.name)
         observation = np.concatenate(
-            [object_position, object_rotation, object_velocity, object_angular_velocity]
+            [object_position, object_rotation,
+                object_velocity, object_angular_velocity]
         )
         return observation.astype(np.float32)
 
@@ -431,7 +493,7 @@ class SorterTask(Task):
 
             pose = self.get_object_pose(object)
             object_index = index * (pose_values + shape_values + size_values)
-            observation[object_index : object_index + pose_values] = pose
+            observation[object_index: object_index + pose_values] = pose
 
             # The shape is a one hot encoded vector of [CUBE, CYLINDER, SPHERE]
             if object.shape == CUBE:
@@ -441,9 +503,9 @@ class SorterTask(Task):
             elif object.shape == SPHERE:
                 shape_type = [0, 0, 1]
             shapes_index = object_index + pose_values
-            observation[shapes_index : shapes_index + shape_values] = shape_type
+            observation[shapes_index: shapes_index + shape_values] = shape_type
             size_index = shapes_index + shape_values
-            observation[size_index : size_index + size_values] = object.size
+            observation[size_index: size_index + size_values] = object.size
             index += 1
 
         # Get the end effector position
@@ -462,10 +524,10 @@ class SorterTask(Task):
         # ee_angulary_velocity = 0.0
         fingers_width = self.robot.get_fingers_width()
         ee_index = (pose_values + shape_values + size_values) * len(self.goal)
-        observation[ee_index : ee_index + 3] = ee_position
-        observation[ee_index + 3 : ee_index + 6] = ee_rotation
-        observation[ee_index + 6 : ee_index + 9] = ee_velocity
-        observation[ee_index + 9 : ee_index + 12] = ee_rotational_velocity
+        observation[ee_index: ee_index + 3] = ee_position
+        observation[ee_index + 3: ee_index + 6] = ee_rotation
+        observation[ee_index + 6: ee_index + 9] = ee_velocity
+        observation[ee_index + 9: ee_index + 12] = ee_rotational_velocity
         observation[ee_index + 12] = fingers_width
 
         return observation
@@ -553,7 +615,7 @@ class SorterTask(Task):
         return np.array([self.score], dtype="float32")
 
 
-class SorterEnv(RobotTaskEnv):
+class My_Arm_RobotEnv(RobotTaskEnv):
     """Sorter task wih Panda robot.
 
     Args:
@@ -576,7 +638,8 @@ class SorterEnv(RobotTaskEnv):
         render_height: int = 480,
     ) -> None:
         if observation_type not in [OBSERVATION_IMAGE, OBSERVATION_POSES]:
-            raise ValueError("observation_type must be one of either images or poses")
+            raise ValueError(
+                "observation_type must be one of either images or poses")
 
         sim = PyBullet(
             render_mode=render_mode,
@@ -589,7 +652,8 @@ class SorterEnv(RobotTaskEnv):
             base_position=np.array([-0.6, 0.0, 0.0]),
             control_type=control_type,
         )
-        task = SorterTask(sim, observation_type, robot, objects_count=objects_count, blocker_bar=blocker_bar)
+        task = Pick_And_Place(sim, observation_type, robot,
+                              objects_count=objects_count, blocker_bar=blocker_bar)
         super().__init__(
             robot,
             task,
@@ -613,7 +677,8 @@ class SorterEnv(RobotTaskEnv):
         return observation, None
 
     def _get_obs(self) -> Dict[str, np.ndarray]:
-        observation = self.task.get_obs().astype(np.float32)
+        observation, _ = self.task.get_obs()
+        observation = observation.astype(np.float32)
         achieved_goal = self.task.get_achieved_goal().astype(np.float32)
         return {
             "observation": observation,
@@ -621,32 +686,27 @@ class SorterEnv(RobotTaskEnv):
         }
 
     def get_obs(self) -> np.ndarray:
-        return self.task.get_obs().astype(np.float32)
+        observation, _ = self.task.get_obs()
+        return observation.astype(np.float32)
 
     def step(
-        self, action: Union[np.ndarray, Dict]
+        self, action: np.ndarray
     ) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
         score_prior = self.task.score
+
+        # Action is now parameterized
         if isinstance(action, dict):
             discrete_action = action['discrete']
             continuous_action = action['continuous']
 
-            if discrete_action == MOVE:
-                force = 0
-                force = np.array([force])
-                action = np.concatenate([continuous_action, force])
-                self.robot.set_action(action)
-            elif discrete_action == PICK:
-                force = 1000
-                force = np.array([force])
-                # dx, dy, dz, force
-                action = np.concatenate([continuous_action, force])
-                self.robot.set_action(action)
-            elif discrete_action == PLACE:
-                force = 0
-                force = np.array([force])
-                action = np.concatenate([continuous_action, force])
-                self.robot.set_action(action)
+            # if discrete_action == DISCRETE_ACTION['Move']:
+            #     self.robot.set_action(continuous_action)
+            # elif discrete_action == DISCRETE_ACTION['Pick']:
+            #     return 1
+            # elif discrete_action == DISCRETE_ACTION['Place']:
+            #     return 2
+            self.robot.set_action(continuous_action)
+
         else:
             self.robot.set_action(action)
         self.sim.step()
@@ -655,7 +715,8 @@ class SorterEnv(RobotTaskEnv):
 
         # An episode is terminated iff the agent has reached the target
         terminated = bool(
-            self.task.is_success(observation["achieved_goal"], self.task.get_goal())
+            self.task.is_success(
+                observation["achieved_goal"], self.task.get_goal())
         )
         truncated = False
         info = {"is_success": terminated}
@@ -681,12 +742,48 @@ CORRECT_SORTS = {
     SORTING_THREE: CUBE,
 }
 
-STEP_PENALTY = -1
+
 FLOOR_PENALTY = -50
 # WRONG_SORT_REWARD = 25
 # SORT_REWARD = 100
 WRONG_SORT_REWARD = 200
 SORT_REWARD = 500
 
+MOVE_TOWARD_OBJECT_REWARD = 1.0     # Reward for moving EE toward the object
+GRASP_SUCCESS_REWARD = 50.0        # Reward for successful grasp
+MOVE_OBJECT_TO_GOAL_REWARD = 1.0   # Reward for moving object toward goal
+DROP_SUCCESS_REWARD = 100.0       # Reward for successfully placing in correct goal
+WRONG_DROP_PENALTY = -20.0        # Penalty for placing object in wrong goal
+FLOOR_COLLISION_PENALTY = -50.0   # Penalty for dropping the object on the floor
+STEP_PENALTY = -0.1               # Small penalty to encourage efficiency
+GRASP_THRESHOLD = 0.02
+
 OBSERVATION_POSES: int = 0
 OBSERVATION_IMAGE: int = 1
+
+DISCRETE_ACTION = {
+    'Move': 0,
+    'Pick': 1,
+    'Place': 2
+}
+
+
+def test_env():
+
+    env = My_Arm_RobotEnv(observation_type=0,
+                          render_mode="human",
+                          blocker_bar=False)
+    add_world_frame()
+    observation, info = env.reset()
+
+    for _ in range(10000):
+        time.sleep(1/24)
+        action = env.action_space.sample()  # random action
+        observation, reward, terminated, truncated, info = env.step(action)
+
+        if terminated or truncated:
+            observation, info = env.reset()
+
+
+if __name__ == '__main__':
+    test_env()
