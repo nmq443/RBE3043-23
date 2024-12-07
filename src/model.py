@@ -10,7 +10,8 @@ class DiscreteActor(Module):
     def __init__(
             self,
             obs_dim: int = 20,
-            output_dim: int = 3
+            output_dim: int = 3,
+            control_type=None
     ):
         """Init the discrete actor. This network estimate a distribution of
         discrete actions.
@@ -20,6 +21,10 @@ class DiscreteActor(Module):
             actions. Defaults to 3 (Move, Pick, Place)
         """
         super(DiscreteActor, self).__init__()
+
+        if control_type is not None and control_type == 'pendulum':
+            obs_dim = 3
+            output_dim = 1
 
         self.model = Sequential(
             Linear(obs_dim, 256),
@@ -60,7 +65,8 @@ class ContinuousActor(Module):
     def __init__(
             self,
             obs_dim: int = 20,
-            continuous_param_dim: List = [3, 1, 3, 1]
+            continuous_param_dim: List = [3, 1, 3, 1],
+            control_type=None
     ):
         """Init the continuous actor. This network predicts mean and std for
         the continuous parameters.
@@ -70,6 +76,10 @@ class ContinuousActor(Module):
             parameter. Defaults to [1, 1, 1, 1], meaning each discrete action only has 1 parameter
         """
         super(ContinuousActor, self).__init__()
+
+        if control_type is not None and control_type == 'pendulum':
+            obs_dim = 3
+            continuous_param_dim = [1]
 
         self.model = ModuleList(
             ModuleDict({
@@ -121,10 +131,14 @@ class ContinuousActor(Module):
 class Critic(Module):
     def __init__(
             self,
-            obs_dim: int
+            obs_dim: int,
+            control_type=None
     ):
         """Init the critic network. This network estimate V(s)"""
         super(Critic, self).__init__()
+
+        if control_type is not None and control_type == 'pendulum':
+            obs_dim = 3
 
         self.model = Sequential(
             Linear(obs_dim, 128),
