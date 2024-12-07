@@ -376,8 +376,8 @@ class Pick_And_Place(Task):
         if closest_object:
             distance_to_object = np.linalg.norm(ee_position - self.get_object_pose(closest_object)[:3])
             distance_delta = closest_distance - distance_to_object  # Check if we moved closer
-            if distance_delta > 0:
-                reward += MOVE_TOWARD_OBJECT_REWARD * distance_delta  # Reward for moving closer to the object
+            distance_delta = abs(distance_delta)
+            reward += MOVE_TOWARD_OBJECT_REWARD * distance_delta  # Reward for moving closer to the object
 
         # 4️⃣ **Check for successful grasping.**
         if self._is_object_grasped(closest_object):
@@ -404,7 +404,7 @@ class Pick_And_Place(Task):
             observation = self._get_img()
         else:
             observation = self._get_poses_output()
-
+        self.score = reward
         return observation, reward
 
     def _get_closest_object(self, ee_position: np.array) -> Tuple[Optional[TargetObject], float]:
@@ -722,9 +722,9 @@ FLOOR_PENALTY = -50
 WRONG_SORT_REWARD = 200
 SORT_REWARD = 500
 
-MOVE_TOWARD_OBJECT_REWARD = 1.0     # Reward for moving EE toward the object
+MOVE_TOWARD_OBJECT_REWARD = -0.1     # Reward for moving EE toward the object
 GRASP_SUCCESS_REWARD = 50.0        # Reward for successful grasp
-MOVE_OBJECT_TO_GOAL_REWARD = 1.0   # Reward for moving object toward goal
+MOVE_OBJECT_TO_GOAL_REWARD = -0.1   # Reward for moving object toward goal
 DROP_SUCCESS_REWARD = 100.0       # Reward for successfully placing in correct goal
 WRONG_DROP_PENALTY = -20.0        # Penalty for placing object in wrong goal
 FLOOR_COLLISION_PENALTY = -50.0   # Penalty for dropping the object on the floor
