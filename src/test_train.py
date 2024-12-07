@@ -1,24 +1,26 @@
-from experiment_env import *
+from test_env_copy import *
 from model import DiscreteActor, ContinuousActor, Critic
 import torch
-from training import Trainer
+from trainer import Trainer
 
 MOVE = 0
 PICK = 1
 PLACE = 2
 
 action_space = {
-    'discrete': [MOVE, PICK, PLACE],
-    'continuous': [3, 3, 3]
+    'discrete': {'Move': 0, 'Pick': 1, 'Place': 2},
+    'continuous': [4, 4, 4]
 }
 
 discrete_dim = len(action_space['discrete'])
 continuous_dim = action_space['continuous']
 
-env = SorterEnv(
-        observation_type=0,
-        render_mode='rgb_array',
-    )
+env = My_Arm_RobotEnv(
+    observation_type=0,
+    render_mode='human',
+    blocker_bar=False
+)
+
 obs, _ = env.reset()
 obs_dim = len(obs['observation'])
 d_actor = DiscreteActor(obs_dim=obs_dim, output_dim=discrete_dim)
@@ -31,9 +33,9 @@ trainer = Trainer(
     discrete_actor=d_actor,
     continuous_actor=c_actor,
     critic=critic,
-    timesteps=2000,
-    timesteps_per_batch=200,
-    max_timesteps_per_episode=750,
+    timesteps=20,
+    timesteps_per_batch=20,
+    max_timesteps_per_episode=75,
 )
 
 trainer.train()
