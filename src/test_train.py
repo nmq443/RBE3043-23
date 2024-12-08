@@ -35,9 +35,10 @@ trainer = Trainer(
     discrete_actor=d_actor,
     continuous_actor=c_actor,
     critic=critic,
-    timesteps=2_000_000,
-    timesteps_per_batch=5_000,
-    max_timesteps_per_episode=750,
+    timesteps=200,
+    timesteps_per_batch=50,
+    max_timesteps_per_episode=10,
+    device='cpu'
 )
 
 trainer.train()
