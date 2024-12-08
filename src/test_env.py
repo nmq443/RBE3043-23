@@ -77,7 +77,7 @@ class Pick_And_Place(Task):
 
         # Size multiplier is the range of sizes allowed for
         # target objects
-        self.size_multiplier: Tuple[float, float] = (0.5, 1.5)
+        self.size_multiplier: Tuple[float, float] = (0.5, 1)
 
         self.task_init()
 
@@ -173,7 +173,6 @@ class Pick_And_Place(Task):
         #         orientation=np.array([0.0, 0.0, 0.0, 1.0]),
         #     )
         for sorter in self.sorter_positions:
-            # print(sorter)
             self.sim.set_base_pose(
                 sorter,
                 position=self.sorter_positions[sorter],
@@ -369,10 +368,10 @@ class Pick_And_Place(Task):
         reward += self._handle_goal_collisions()
 
         # Reward for moving towards the closest object
-        reward += self._reward_closer_to_object()
+        #reward += self._reward_closer_to_object()
 
         # Reward for successful grasping
-        reward += self._reward_grasping_success()
+        #reward += self._reward_grasping_success()
 
         # Reward for moving an object towards its goal
         reward += self._reward_object_towards_goal()
@@ -388,6 +387,7 @@ class Pick_And_Place(Task):
             observation = self._get_img()
         else:
             observation = self._get_poses_output()
+        self.score += reward
         return observation, reward
 
     def _handle_floor_collisions(self) -> float:
@@ -403,7 +403,7 @@ class Pick_And_Place(Task):
                 reward += FLOOR_COLLISION_PENALTY
                 self.sim.physics_client.removeBody(object_id)
                 self.goal[object_key].removed = True
-                # print(f"Object {object_key} dropped to the floor")
+                print(f"Object {object_key} dropped to the floor")
         return reward
 
     def _handle_goal_collisions(self) -> float:
@@ -426,10 +426,10 @@ class Pick_And_Place(Task):
                     # Reward or penalize based on correct/incorrect sorting
                     if CORRECT_SORTS[goal] == object.shape:
                         reward += DROP_SUCCESS_REWARD
-                        # print(f"Object {object_key} correctly sorted into {goal}")
+                        print(f"Object {object_key} correctly sorted into {goal}")
                     else:
                         reward += WRONG_DROP_PENALTY
-                        # print(f"Object {object_key} incorrectly sorted into {goal}")
+                        print(f"Object {object_key} incorrectly sorted into {goal}")
         return reward
 
     def _reward_closer_to_object(self) -> float:
@@ -444,11 +444,11 @@ class Pick_And_Place(Task):
 
     def _reward_grasping_success(self) -> float:
         """Rewards the agent for successfully grasping an object."""
+        return 0.0
         closest_object, _ = self._get_closest_object(self.robot.get_ee_position())
         if closest_object and self._is_object_grasped(closest_object):
-            # print(f"Object {closest_object} successfully grasped")
+            print(f"Object {closest_object} successfully grasped")
             return GRASP_SUCCESS_REWARD
-        return 0.0
 
     def _reward_object_towards_goal(self) -> float:
         """Rewards the agent for moving objects closer to their goals."""
@@ -458,7 +458,6 @@ class Pick_And_Place(Task):
             goal_pos = self.sorter_positions[GOALS[closest_object.shape]]
             distance_to_goal = np.linalg.norm(object_pos - goal_pos)
             distance_delta = abs(closest_distance - distance_to_goal)
-            # print("Distance: ", distance_delta)
             return MOVE_OBJECT_TO_GOAL_REWARD * distance_delta
 
         return 0.0
@@ -814,14 +813,15 @@ def test_env():
                           render_mode="human",
                           blocker_bar=False,
                           objects_count=1,
-                          sorting_count=1
+                          sorting_count=2
                           )
     add_world_frame()
     observation, info = env.reset()
 
     for _ in range(10000):
         time.sleep(1/24)
-        action = env.action_space.sample()  # random action
+        action = env.action_space.sample()
+        print(action)
         observation, reward, terminated, truncated, info = env.step(action)
 
         if terminated or truncated:
@@ -829,5 +829,44 @@ def test_env():
             observation, info = env.reset()
 
 
+import time
+
+
+def test_fixed_actions():
+    env = My_Arm_RobotEnv(
+        observation_type=0,
+        render_mode="human",
+        blocker_bar=False,
+        objects_count=1,
+        sorting_count=2
+    )
+
+    observation, info = env.reset()
+
+    # List of fixed actions to cycle through
+    fixed_actions = [
+        [0, 0, 0.1, 0],  # Move up
+        [0, 0, -0.1, 0],  # Move down
+        [-0.1, 0, 0, 0],  # Move left
+        [0.1, 0, 0, 0],  # Move right
+        [0, 0.1, 0, 0],  # Move forward
+        [0, -0.1, 0, 0],  # Move backward
+        [0, 0, 0, 0.3],  # Open gripper
+        [0, 0, 0, -0.2],  # Close gripper
+        [0, 0, 0.1, 0.7],  # Move up + open gripper
+        [0, 0, -0.1, -0.5]  # Move down + close gripper
+    ]
+
+    for action in fixed_actions:
+        for _ in range(50):  # Each action lasts for 50 time steps
+            observation, reward, terminated, truncated, info = env.step(action)
+            print(f"Action: {action}, Reward: {reward}, Terminated: {terminated}")
+            time.sleep(1 / 24)  # Delay for rendering
+
+        if terminated or truncated:
+            print("Episode ended, resetting environment.")
+            observation, info = env.reset()
+
+
 if __name__ == '__main__':
-    test_env()
+    test_fixed_actions()
