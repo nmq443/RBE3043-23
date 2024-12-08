@@ -50,10 +50,11 @@ class Trainer:
 
         # Optimizers
         self.discrete_optimizer = torch.optim.Adam(
-            params=discrete_actor.parameters(), lr=self.alpha)
+            params=self.discrete_actor.parameters(), lr=self.alpha)
         self.continuous_optimizer = torch.optim.Adam(
-            params=continuous_actor.parameters(), lr=self.alpha)
-        self.critic_optimizer = torch.optim.Adam(params=critic.parameters(),
+            params=self.continuous_actor.parameters(), lr=self.alpha)
+        self.critic_optimizer = torch.optim.Adam(
+            params=self.critic.parameters(),
                                                  lr=self.alpha)
         # Memory
         self.total_rewards: List[float] = []
@@ -249,26 +250,25 @@ class Trainer:
             current_discrete_dist = self.discrete_actor(observation)
             current_discrete_action = current_discrete_dist.sample()
             current_discrete_log_prob = current_discrete_dist.log_prob(
-                current_discrete_action)
+                current_discrete_action).detach().numpy()
             current_discrete_action = current_discrete_action.detach().numpy()
 
             current_continuous_params = self.continuous_actor(observation)
-            mean = current_continuous_params[current_discrete_action.item()][
+            mean = current_continuous_params[current_discrete_action][
                 'mean']
-            std = current_continuous_params[current_discrete_action.item()][
+            std = current_continuous_params[current_discrete_action][
                 'std']
             current_continuous_dist = torch.distributions.Normal(mean, std)
             current_continuous_action = current_continuous_dist.sample()
             continuous_log_prob = current_continuous_dist.log_prob(
-                current_continuous_action)
-            current_continuous_action = current_continuous_action.detach(
-
-            ).numpy()
+                current_continuous_action).detach().numpy()
+            current_continuous_action = current_continuous_action.detach().numpy()
 
             action = {
                 'discrete': current_discrete_action,
                 'continuous': current_continuous_action
             }
+
             obs, reward, terminated, _, _ = self.env.step(action)
 
             discrete_actions.append(current_discrete_action)
@@ -289,7 +289,7 @@ class Trainer:
         discounted_rewards = self.calculate_discounted_reward(rewards)
 
         # Get the terminal reward and record for status tracking
-        # self.total_rewards.append(sum(rewards))
+        self.total_rewards.append(sum(rewards))
 
         return (observations, discrete_actions, continuous_params,
                 discrete_log_probs, continuous_log_probs, discounted_rewards)
@@ -306,7 +306,7 @@ class Trainer:
         rewards = []
 
         while len(observations) < self.timesteps_per_batch:
-            # self.current_action = "Rollout"
+            self.current_action = "Rollout"
             (
                 obs,
                 chosen_discrete_actions,
@@ -330,14 +330,14 @@ class Trainer:
             self.print_status()
 
         # Trim the batch memory to the batch size
-        observations = observations[:self.timesteps_per_batch]
-        discrete_actions = discrete_actions[:self.timesteps_per_batch]
-        continuous_actions = continuous_actions[:self.timesteps_per_batch]
+        observations = observations[: self.timesteps_per_batch]
+        discrete_actions = discrete_actions[: self.timesteps_per_batch]
+        continuous_actions = continuous_actions[: self.timesteps_per_batch]
         discrete_log_probabilities = discrete_log_probabilities[
-            :self.timesteps_per_batch]
+            : self.timesteps_per_batch]
         continuous_log_probabilities = continuous_log_probabilities[
-            :self.timesteps_per_batch]
-        rewards = rewards[:self.timesteps_per_batch]
+            : self.timesteps_per_batch]
+        rewards = rewards[: self.timesteps_per_batch]
 
         return (observations, discrete_actions, continuous_actions,
                 discrete_log_probabilities, continuous_log_probabilities,
@@ -376,7 +376,6 @@ class Trainer:
             normalized_advantage
     ):
         """Peform a single epoch of training for the actors and critic model. Return the loss for each model at the end of the step"""
-
         # ---- Discrete Actor ----
         current_discrete_dist = self.discrete_actor(observations)
         current_discrete_log_probs = current_discrete_dist.log_prob(
@@ -395,30 +394,23 @@ class Trainer:
 
         # ---- Continuous Actor ----
         current_continuous_params = self.continuous_actor(observations)
-<<<<<<< HEAD
-        means = torch.stack([current_continuous_params[
-            int(discrete_action.item())]['mean']
-                 for discrete_action in discrete_actions], dim=0)
-=======
-        # mean = current_continuous_params[discrete_actions.item()][
-        #     'mean']
-        means = torch.stack([current_continuous_params[
-            int(discrete_action.item())]['mean']
-                 for discrete_action in discrete_actions], dim=0)
-        # std = current_continuous_params[discrete_actions.item()][
-        #     'std']
->>>>>>> 80bf813f611fed47d66abde27e10ca3e8074844d
-        stds = torch.stack([current_continuous_params[
-            int(discrete_action.item())]['std']
-                 for discrete_action in discrete_actions], dim=0)
+        means = [current_continuous_params[
+                                 int(discrete_action.item())]['mean']
+                             for discrete_action in discrete_actions]
+        stds = [current_continuous_params[
+                     int(discrete_action.item())]['std']
+                 for discrete_action in discrete_actions]
+
+        means = torch.stack(means)
+        stds = torch.stack(stds)
+
         current_continuous_dist = torch.distributions.Normal(means, stds)
-        current_continuous_log_prob = current_continuous_dist.log_prob(
+        current_continuous_log_probs = current_continuous_dist.log_prob(
             continuous_actions)
         continuous_ratios = torch.exp(
-            current_continuous_log_prob - continuous_log_probabilities)
+            current_continuous_log_probs - continuous_log_probabilities)
 
-        normalized_advantage = normalized_advantage.detach().unsqueeze(
-            1).unsqueeze(2)
+        normalized_advantage = normalized_advantage.unsqueeze(1).unsqueeze(2)
         continuous_actor_loss = -torch.min(
             continuous_ratios * normalized_advantage,
             torch.clamp(continuous_ratios, 1 - self.epsilon,
@@ -451,14 +443,10 @@ class Trainer:
                 np.array(discrete_actions, dtype=np.float32))
             continuous_actions = Tensor(
                 np.array(continuous_actions, dtype=np.float32))
-            # discrete_log_probabilities = Tensor(
-            #     np.array(discrete_log_probabilities, dtype=np.float32))
-            discrete_log_probabilities = torch.stack(
-                discrete_log_probabilities, dim=0)
-            # continuous_log_probabilities = Tensor(
-            #     np.array(continuous_log_probabilities, dtype=np.float32))
-            continuous_log_probabilities = torch.stack(
-                continuous_log_probabilities, dim=0)
+            discrete_log_probabilities = Tensor(
+                np.array(discrete_log_probabilities, dtype=np.float32))
+            continuous_log_probabilities = Tensor(
+                np.array(continuous_log_probabilities, dtype=np.float32))
             rewards = Tensor(np.array(rewards, dtype=np.float32))
 
             # Perform training steps

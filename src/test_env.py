@@ -173,7 +173,7 @@ class Pick_And_Place(Task):
         #         orientation=np.array([0.0, 0.0, 0.0, 1.0]),
         #     )
         for sorter in self.sorter_positions:
-            print(sorter)
+            # print(sorter)
             self.sim.set_base_pose(
                 sorter,
                 position=self.sorter_positions[sorter],
@@ -403,7 +403,7 @@ class Pick_And_Place(Task):
                 reward += FLOOR_COLLISION_PENALTY
                 self.sim.physics_client.removeBody(object_id)
                 self.goal[object_key].removed = True
-                print(f"Object {object_key} dropped to the floor")
+                # print(f"Object {object_key} dropped to the floor")
         return reward
 
     def _handle_goal_collisions(self) -> float:
@@ -426,10 +426,10 @@ class Pick_And_Place(Task):
                     # Reward or penalize based on correct/incorrect sorting
                     if CORRECT_SORTS[goal] == object.shape:
                         reward += DROP_SUCCESS_REWARD
-                        print(f"Object {object_key} correctly sorted into {goal}")
+                        # print(f"Object {object_key} correctly sorted into {goal}")
                     else:
                         reward += WRONG_DROP_PENALTY
-                        print(f"Object {object_key} incorrectly sorted into {goal}")
+                        # print(f"Object {object_key} incorrectly sorted into {goal}")
         return reward
 
     def _reward_closer_to_object(self) -> float:
@@ -446,7 +446,7 @@ class Pick_And_Place(Task):
         """Rewards the agent for successfully grasping an object."""
         closest_object, _ = self._get_closest_object(self.robot.get_ee_position())
         if closest_object and self._is_object_grasped(closest_object):
-            print(f"Object {closest_object} successfully grasped")
+            # print(f"Object {closest_object} successfully grasped")
             return GRASP_SUCCESS_REWARD
         return 0.0
 
@@ -458,7 +458,7 @@ class Pick_And_Place(Task):
             goal_pos = self.sorter_positions[GOALS[closest_object.shape]]
             distance_to_goal = np.linalg.norm(object_pos - goal_pos)
             distance_delta = abs(closest_distance - distance_to_goal)
-            print("Distance: ", distance_delta)
+            # print("Distance: ", distance_delta)
             return MOVE_OBJECT_TO_GOAL_REWARD * distance_delta
 
         return 0.0
@@ -765,8 +765,8 @@ class My_Arm_RobotEnv(RobotTaskEnv):
         step_penalty = STEP_PENALTY
         reward = (score_after - score_prior) + step_penalty
         self.total_score += reward
-        print("Score: ",self.total_score)
-        print("reward: ", reward)
+        # print("Score: ",self.total_score)
+        # print("reward: ", reward)
         return observation, reward, terminated, truncated, info
 
 
