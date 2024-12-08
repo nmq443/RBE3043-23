@@ -42,6 +42,7 @@ class Pick_And_Place(Task):
         objects_count: int = 3,
         img_size: Tuple[int, int] = (256, 256),
         blocker_bar: bool = True,
+        sorting_count: int  = 1
     ):
         if observation_type not in [OBSERVATION_POSES, OBSERVATION_IMAGE]:
             raise Exception(
@@ -54,7 +55,7 @@ class Pick_And_Place(Task):
 
         self.robot = robot
         self.observation_type = observation_type
-
+        self.sorting_count = sorting_count
         self.score: float = 0.0
 
         self.objects_count: int = objects_count
@@ -101,38 +102,54 @@ class Pick_And_Place(Task):
         # )
 
     def _init_sorting_areas(self):
-        self.sorter_positions = {
-            SORTING_ONE: np.array([-0.25, -0.2, 0.01]),
-            SORTING_TWO: np.array([-0.25, 0.00, 0.01]),
-            SORTING_THREE: np.array([-0.25, 0.2, 0.01]),
-        }
+        if self.sorting_count == 3:
+            self.sorter_positions = {
+                SORTING_ONE: np.array([-0.25, -0.2, 0.01]),
+                SORTING_TWO: np.array([-0.25, 0.00, 0.01]),
+                SORTING_THREE: np.array([-0.25, 0.2, 0.01]),
+            }
+        if self.sorting_count == 2:
+            self.sorter_positions = {
+                SORTING_ONE: np.array([-0.25, -0.2, 0.01]),
+                SORTING_TWO: np.array([-0.25, 0.00, 0.01]),
+            }
+        if self.sorting_count == 1:
+            self.sorter_positions = {
+                SORTING_ONE: np.array([-0.25, -0.2, 0.01]),
+            }
         if self.blocker_bar:
             self.sorter_positions["blocker"] = np.array([-0.2, 0.0, 0.01])
+        count = self.sorting_count
+        if (count == 3):
+            self.sim.create_box(
+                body_name=SORTING_THREE,
+                half_extents=np.array([0.05, 0.1, 0.01]),
+                mass=0.0,
+                ghost=False,
+                position=self.sorter_positions[SORTING_THREE],
+                rgba_color=np.array([1.0, 0, 0, 0.4]),
+            )
+            count -=1
+        if count == 2:
+            self.sim.create_box(
+                body_name=SORTING_TWO,
+                half_extents=np.array([0.05, 0.1, 0.01]),
+                mass=0.0,
+                ghost=False,
+                position=self.sorter_positions[SORTING_TWO],
+                rgba_color=np.array([0.0, 1.0, 0, 0.4]),
+            )
+            count-=1
+        if count == 1:
+            self.sim.create_box(
+                body_name=SORTING_ONE,
+                half_extents=np.array([0.05, 0.1, 0.01]),
+                mass=0.0,
+                ghost=False,
+                position=self.sorter_positions[SORTING_ONE],
+                rgba_color=np.array([0, 0, 1.0, 0.5]),
+            )
 
-        self.sim.create_box(
-            body_name=SORTING_ONE,
-            half_extents=np.array([0.05, 0.1, 0.01]),
-            mass=0.0,
-            ghost=False,
-            position=self.sorter_positions[SORTING_ONE],
-            rgba_color=np.array([1.0, 0, 0, 0.4]),
-        )
-        self.sim.create_box(
-            body_name=SORTING_TWO,
-            half_extents=np.array([0.05, 0.1, 0.01]),
-            mass=0.0,
-            ghost=False,
-            position=self.sorter_positions[SORTING_TWO],
-            rgba_color=np.array([0.0, 1.0, 0, 0.4]),
-        )
-        self.sim.create_box(
-            body_name=SORTING_THREE,
-            half_extents=np.array([0.05, 0.1, 0.01]),
-            mass=0.0,
-            ghost=False,
-            position=self.sorter_positions[SORTING_THREE],
-            rgba_color=np.array([0, 0, 1.0, 0.5]),
-        )
         if self.blocker_bar:
             # Create the blocking bar
             self.sim.create_box(
@@ -149,7 +166,14 @@ class Pick_And_Place(Task):
         set_goal_positions will ensure that goals are placed
         in the appropriate place in the environment
         """
+        # for count in range(self.sorting_count):
+        #     self.sim.set_base_pose(
+        #         GOALS[count],
+        #         position=self.sorter_positions[GOALS[count]],
+        #         orientation=np.array([0.0, 0.0, 0.0, 1.0]),
+        #     )
         for sorter in self.sorter_positions:
+            print(sorter)
             self.sim.set_base_pose(
                 sorter,
                 position=self.sorter_positions[sorter],
@@ -175,7 +199,12 @@ class Pick_And_Place(Task):
             while True:
                 name = f"object_{object}"
                 color = self.get_random_color()
-                shape = choice(SHAPES)
+                if (self.sorting_count == 1):
+                    shape = choice(SHAPES[0:1])
+                if (self.sorting_count == 2):
+                    shape = choice(SHAPES[0:2])
+                if (self.sorting_count == 3):
+                    shape = choice(SHAPES)
                 position = self.get_random_object_position()
 
                 if shape == CUBE:
@@ -384,7 +413,8 @@ class Pick_And_Place(Task):
             if self.goal[object_key].removed:
                 continue
 
-            for goal in GOALS:
+            for i in range(self.sorting_count):
+                goal = GOALS[i]
                 object = self.goal[object_key]
                 object_id = object.id
                 goal_id = self.sim._bodies_idx[goal]
@@ -653,6 +683,7 @@ class My_Arm_RobotEnv(RobotTaskEnv):
         renderer: str = "OpenGL",
         render_width: int = 720,
         render_height: int = 480,
+        sorting_count: int = 1
     ) -> None:
         if observation_type not in [OBSERVATION_IMAGE, OBSERVATION_POSES]:
             raise ValueError("observation_type must be one of either images or poses")
@@ -668,7 +699,12 @@ class My_Arm_RobotEnv(RobotTaskEnv):
             base_position=np.array([-0.6, 0.0, 0.0]),
             control_type=control_type,
         )
-        task = Pick_And_Place(sim, observation_type, robot, objects_count=objects_count, blocker_bar=blocker_bar)
+        task = Pick_And_Place(sim,
+                              observation_type,
+                              robot,
+                              objects_count=objects_count,
+                              blocker_bar=blocker_bar,
+                              sorting_count=sorting_count)
         super().__init__(
             robot,
             task,
@@ -771,7 +807,9 @@ def test_env():
 
     env = My_Arm_RobotEnv(observation_type=0,
                           render_mode="human",
-                          blocker_bar=False)
+                          blocker_bar=False,
+                          objects_count=1,
+                          )
     add_world_frame()
     observation, info = env.reset()
 
