@@ -809,6 +809,7 @@ def test_env():
                           render_mode="human",
                           blocker_bar=False,
                           objects_count=1,
+                          sorting_count=1
                           )
     add_world_frame()
     observation, info = env.reset()
