@@ -395,9 +395,19 @@ class Trainer:
 
         # ---- Continuous Actor ----
         current_continuous_params = self.continuous_actor(observations)
+<<<<<<< HEAD
         means = torch.stack([current_continuous_params[
             int(discrete_action.item())]['mean']
                  for discrete_action in discrete_actions], dim=0)
+=======
+        # mean = current_continuous_params[discrete_actions.item()][
+        #     'mean']
+        means = torch.stack([current_continuous_params[
+            int(discrete_action.item())]['mean']
+                 for discrete_action in discrete_actions], dim=0)
+        # std = current_continuous_params[discrete_actions.item()][
+        #     'std']
+>>>>>>> 80bf813f611fed47d66abde27e10ca3e8074844d
         stds = torch.stack([current_continuous_params[
             int(discrete_action.item())]['std']
                  for discrete_action in discrete_actions], dim=0)
