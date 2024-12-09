@@ -3,9 +3,9 @@ from model import DiscreteActor, ContinuousActor, Critic
 import torch
 from trainer import Trainer
 
-MOVE = 0
-PICK = 1
-PLACE = 2
+# MOVE = 0
+# PICK = 1
+# PLACE = 2
 
 action_space = {
     'discrete': {'Move': 0, 'Pick': 1, 'Place': 2},
