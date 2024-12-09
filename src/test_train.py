@@ -1,4 +1,4 @@
-from test_env import *
+from environment import *
 from model import DiscreteActor, ContinuousActor, Critic
 import torch
 from trainer import Trainer

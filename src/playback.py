@@ -1,4 +1,4 @@
-from test_env import *
+from environment import *
 from model import *
 from PIL import Image
 from typing import Dict, List
@@ -8,7 +8,8 @@ FPS = 60
 FRAME_DELAY = 1.0/FPS
 MAX_EPISODE_LENGTH_SECONDS = 5
 RECORDING_EPISODE_COUNT = 10
-MODEL_PATH = "./training/discrete_actor.pth"
+DISCRETE_MODEL_PATH = "./training/discrete_actor.pth"
+CONTINUOUS_MODEL_PATH = "./training/continuous_actor.pth"
 OUTPUT_FILE = "./playback.gif"
 
 env = My_Arm_RobotEnv(
@@ -30,8 +31,10 @@ continuous_dim = action_space['continuous']
 obs, _ = env.reset()
 obs_dim = len(obs['observation'])
 
-actor = DiscreteActor(obs_dim=obs_dim, output_dim=discrete_dim)
-actor.load(MODEL_PATH)
+discrete_actor = DiscreteActor(obs_dim=obs_dim, output_dim=discrete_dim)
+discrete_actor.load(DISCRETE_MODEL_PATH)
+continuous_actor = ContinuousActor(obs_dim=obs_dim, continuous_param_dim=continuous_dim)
+continuous_actor.load(CONTINUOUS_MODEL_PATH)
 
 episode = 0
 episode_length = 0
