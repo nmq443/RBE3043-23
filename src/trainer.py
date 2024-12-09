@@ -270,7 +270,7 @@ class Trainer:
             }
 
             obs, reward, terminated, _, _ = self.env.step(action)
-            print(reward)
+
 
             discrete_actions.append(current_discrete_action)
             discrete_log_probs.append(current_discrete_log_prob)

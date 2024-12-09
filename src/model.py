@@ -65,7 +65,7 @@ class ContinuousActor(Module):
     def __init__(
             self,
             obs_dim: int = 20,
-            continuous_param_dim: List = [3, 1, 3, 1],
+            continuous_param_dim: List = [4, 4, 4],
             control_type=None
     ):
         """Init the continuous actor. This network predicts mean and std for

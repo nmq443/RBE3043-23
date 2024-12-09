@@ -360,7 +360,7 @@ class Pick_And_Place(Task):
             float: The reward for this step.
         """
         reward = 0.0  # Initialize the reward
-
+        print(self.sim._bodies_idx)
         # Handle floor collisions
         reward += self._handle_floor_collisions()
 
@@ -368,7 +368,7 @@ class Pick_And_Place(Task):
         reward += self._handle_goal_collisions()
 
         # Reward for moving towards the closest object
-        #reward += self._reward_closer_to_object()
+        reward += self._reward_closer_to_object()
 
         # Reward for successful grasping
         #reward += self._reward_grasping_success()
@@ -418,7 +418,8 @@ class Pick_And_Place(Task):
                 object = self.goal[object_key]
                 object_id = object.id
                 goal_id = self.sim._bodies_idx[goal]
-
+                print("Object: ",object.shape)
+                print("Goal ", goal)
                 if self.check_collision(object_id, goal_id):
                     self.sim.physics_client.removeBody(object_id)
                     self.goal[object_key].removed = True
@@ -840,7 +841,7 @@ def test_fixed_actions():
         objects_count=1,
         sorting_count=2
     )
-
+    frame = []
     observation, info = env.reset()
 
     # List of fixed actions to cycle through
@@ -860,7 +861,7 @@ def test_fixed_actions():
     for action in fixed_actions:
         for _ in range(50):  # Each action lasts for 50 time steps
             observation, reward, terminated, truncated, info = env.step(action)
-            print(f"Action: {action}, Reward: {reward}, Terminated: {terminated}")
+            # print(f"Action: {action}, Reward: {reward}, Terminated: {terminated}")
             time.sleep(1 / 24)  # Delay for rendering
 
         if terminated or truncated:
