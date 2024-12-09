@@ -84,12 +84,20 @@ class ContinuousActor(Module):
         self.model = ModuleList(
             ModuleDict({
                 "mean": Sequential(
-                    Linear(obs_dim, 64),
+                    Linear(obs_dim, 256),
+                    LeakyReLU(),
+                    Linear(256, 128),
+                    LeakyReLU(),
+                    Linear(128, 64),
                     LeakyReLU(),
                     Linear(64, param_dim)
                 ),
                 "std": Sequential(
-                    Linear(obs_dim, 64),
+                    Linear(obs_dim, 256),
+                    LeakyReLU(),
+                    Linear(256, 128),
+                    LeakyReLU(),
+                    Linear(128, 64),
                     LeakyReLU(),
                     Linear(64, param_dim),
                     Softplus()  # Ensures positive standard deviations
@@ -141,13 +149,13 @@ class Critic(Module):
             obs_dim = 3
 
         self.model = Sequential(
-            Linear(obs_dim, 128),
+            Linear(obs_dim, 256),
+            LeakyReLU(),
+            Linear(256, 128),
             LeakyReLU(),
             Linear(128, 64),
             LeakyReLU(),
-            Linear(64, 32),
-            LeakyReLU(),
-            Linear(32, 1),
+            Linear(64, 1),
         )
 
     def forward(self, input: np.ndarray) -> Tensor:

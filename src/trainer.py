@@ -1,9 +1,10 @@
 import torch
 import numpy as np
-from torch import Tensor
 from torch.nn import MSELoss
 from torch.distributions import Normal
 from panda_gym.envs.core import RobotTaskEnv
+from torch.xpu import device
+
 from model import DiscreteActor, ContinuousActor, Critic
 from typing import List, Tuple
 import sys
@@ -25,15 +26,22 @@ class Trainer:
             gamma: float = 0.99,
             epsilon: float = 0.2,
             alpha: float = 3e-4,
-            save_every_x_timesteps: int = 50000
+            save_every_x_timesteps: int = 50000,
+            device=None
     ):
         # Environment
         self.env = env
 
+        # Device
+        if device == None:
+            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = device
+
         # Neural networks
-        self.discrete_actor = discrete_actor
-        self.continuous_actor = continuous_actor
-        self.critic = critic
+        self.discrete_actor = discrete_actor.to(self.device)
+        self.continuous_actor = continuous_actor.to(self.device)
+        self.critic = critic.to(self.device)
 
         # Hypeparameters
         self.gamma = gamma
@@ -199,6 +207,10 @@ class Trainer:
         self.continuous_actor.load(f"{directory}/continuous_actor.pth")
         self.critic.load(f"{directory}/critic.pth")
 
+        self.discrete_actor = self.discrete_actor.to(self.device)
+        self.continuous_actor = self.continuous_actor.to(self.device)
+        self.critic = self.critic.to(self.device)
+
         data = pickle.load(open(f"{directory}/state.data", "rb"))
 
         self.timesteps = data["timesteps"]
@@ -233,6 +245,8 @@ class Trainer:
         observation, _ = self.env.reset()
         if isinstance(observation, dict):
             observation = observation["observation"]
+            observation = torch.tensor(observation, device=self.device,
+                                       dtype=torch.float32)
 
         timesteps = 0
         observations = []
@@ -250,8 +264,10 @@ class Trainer:
             current_discrete_dist = self.discrete_actor(observation)
             current_discrete_action = current_discrete_dist.sample()
             current_discrete_log_prob = current_discrete_dist.log_prob(
-                current_discrete_action).detach().numpy()
-            current_discrete_action = current_discrete_action.detach().numpy()
+                current_discrete_action).detach().cpu().numpy()
+            current_discrete_action = current_discrete_action.detach(
+
+            ).cpu().numpy()
 
             current_continuous_params = self.continuous_actor(observation)
             mean = current_continuous_params[current_discrete_action][
@@ -261,8 +277,10 @@ class Trainer:
             current_continuous_dist = torch.distributions.Normal(mean, std)
             current_continuous_action = current_continuous_dist.sample()
             continuous_log_prob = current_continuous_dist.log_prob(
-                current_continuous_action).detach().numpy()
-            current_continuous_action = current_continuous_action.detach().numpy()
+                current_continuous_action).detach().cpu().numpy()
+            current_continuous_action = current_continuous_action.detach(
+
+            ).cpu().numpy()
 
             action = {
                 'discrete': current_discrete_action,
@@ -270,7 +288,6 @@ class Trainer:
             }
 
             obs, reward, terminated, _, _ = self.env.step(action)
-
 
             discrete_actions.append(current_discrete_action)
             discrete_log_probs.append(current_discrete_log_prob)
@@ -360,7 +377,9 @@ class Trainer:
         batch of episode """
         V = self.critic(observations).detach().squeeze()
 
-        advantage = Tensor(np.array(rewards, dtype="float32")) - V
+        advantage = (torch.tensor(rewards, dtype=torch.float32,
+                                  device=self.device)
+                     - V)
         normalized_advantage = (advantage - advantage.mean()) / (
             advantage.std() + 1e-8)
 
@@ -424,7 +443,9 @@ class Trainer:
 
         # ---- Critic Network ----
         V = self.critic(observations)
-        reward_tensor = Tensor(rewards).unsqueeze(-1)
+        reward_tensor = torch.tensor(rewards, dtype=torch.float32,
+                                     device=self.device
+                                     ).unsqueeze(-1)
         critic_loss = MSELoss()(V, reward_tensor)
 
         self.critic_optimizer.zero_grad()
@@ -438,17 +459,24 @@ class Trainer:
             # Rollout to get next training batch
             observations, discrete_actions, continuous_actions, discrete_log_probabilities, continuous_log_probabilities, rewards = self.rollout()
 
-            # Convert to numpy arrays and then to tensors
-            observations = Tensor(np.array(observations, dtype=np.float32))
-            discrete_actions = Tensor(
-                np.array(discrete_actions, dtype=np.float32))
-            continuous_actions = Tensor(
-                np.array(continuous_actions, dtype=np.float32))
-            discrete_log_probabilities = Tensor(
-                np.array(discrete_log_probabilities, dtype=np.float32))
-            continuous_log_probabilities = Tensor(
-                np.array(continuous_log_probabilities, dtype=np.float32))
-            rewards = Tensor(np.array(rewards, dtype=np.float32))
+            # Convert to tensors
+            observations = torch.stack(observations, dim=0)
+            # observations = torch.tensor(observations, dtype=torch.float32,
+            #                             device=self.device)
+            discrete_actions = torch.tensor(np.array(discrete_actions),
+                                            dtype=torch.float32,
+                                            device=self.device)
+            continuous_actions = torch.tensor(np.array(continuous_actions),
+                                              dtype=torch.float32,
+                                              device=self.device)
+            discrete_log_probabilities = torch.tensor(
+                np.array(discrete_log_probabilities), dtype=torch.float32,
+                device=self.device)
+            continuous_log_probabilities = torch.tensor(
+                np.array(continuous_log_probabilities), dtype=torch.float32,
+                device=self.device)
+            rewards = torch.tensor(np.array(rewards), dtype=torch.float32,
+                                   device=self.device)
 
             # Perform training steps
             for c in range(self.training_cycles_per_batch):
