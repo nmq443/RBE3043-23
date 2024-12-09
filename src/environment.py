@@ -371,7 +371,7 @@ class Pick_And_Place(Task):
         reward += self._reward_closer_to_object()
 
         # Reward for successful grasping
-        #reward += self._reward_grasping_success()
+        reward += self._reward_grasping_success()
 
         # Reward for moving an object towards its goal
         reward += self._reward_object_towards_goal()
