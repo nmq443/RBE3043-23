@@ -3,8 +3,7 @@ import numpy as np
 from torch.nn import MSELoss
 from torch.distributions import Normal
 from panda_gym.envs.core import RobotTaskEnv
-from torch.xpu import device
-
+import os
 from model import DiscreteActor, ContinuousActor, Critic
 from typing import List, Tuple
 import sys
@@ -70,9 +69,11 @@ class Trainer:
         self.discrete_actor_losses: List[float] = []
         self.continuous_actor_losses: List[float] = []
         self.critic_losses: List[float] = []
+        self.success_rate: List[float] = []
         self.previous_print_length: int = 0
         self.current_action = "Initializing"
         self.last_save: int = 0
+        self.num_success = 0
 
     def print_status(self):
         latest_reward = 0.0
@@ -161,10 +162,33 @@ class Trainer:
         plt.plot(episodes, averages, linestyle="solid", color="red")
         plt.plot(episodes, trendline(episodes), linestyle="--", color="blue")
 
+        if not os.path.exists(f"{filepath}/figs"):
+            os.makedirs(f"{filepath}/figs")
+
         plt.title("Rewards per episode")
         plt.ylabel("Reward")
         plt.xlabel("Episode")
-        plt.savefig(filepath)
+        plt.savefig(f"{filepath}/figs/rewards.png")
+
+        # Success Rate
+        fig1, ax1 = plt.subplots()
+        ax1.plot(episodes, self.success_rate)
+        plt.title("Success rate per episode")
+        plt.ylabel("Success Rate")
+        plt.xlabel("Episode")
+        plt.savefig(f"{filepath}/figs/success_rate.png")
+
+        # Losses
+        fig2, ax2 = plt.subplots()
+        losses = [self.discrete_actor_losses[i] +
+                  self.continuous_actor_losses[i] +
+                  self.critic_losses[i] for i in range(len(episodes))]
+        plt.plot(episodes, losses)
+        plt.title("Losses per episode")
+        plt.ylabel("Loss")
+        plt.xlabel("Episode")
+        plt.savefig(f"{filepath}/figs/losses.png")
+
 
     def save(self, directory: str):
         """
@@ -176,7 +200,7 @@ class Trainer:
         self.discrete_actor.save(f"{directory}/discrete_actor.pth")
         self.continuous_actor.save(f"{directory}/continuous_actor.pth")
         self.critic.save(f"{directory}/critic.pth")
-        self.create_plot(f"{directory}/rewards.png")
+        self.create_plot(f"{directory}/")
 
         # Now save the trainer's state data
         data = {
@@ -308,6 +332,8 @@ class Trainer:
 
         # Get the terminal reward and record for status tracking
         self.total_rewards.append(sum(rewards))
+        self.num_success = self.env.success_objects_count
+        self.success_rate.append(self.num_success / self.env.objects_count)
 
         return (observations, discrete_actions, continuous_params,
                 discrete_log_probs, continuous_log_probs, discounted_rewards)

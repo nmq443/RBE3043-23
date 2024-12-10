@@ -18,7 +18,7 @@ env = My_Arm_RobotEnv(
     render_mode='human',
     blocker_bar=True,
     objects_count=2,
-    sorting_count=3
+    sorting_count=2
 )
 
 obs, _ = env.reset()

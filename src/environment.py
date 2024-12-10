@@ -59,6 +59,7 @@ class Pick_And_Place(Task):
         self.score: float = 0.0
 
         self.objects_count: int = objects_count
+        self.success_objects_count: int = 0
         if observation_type == OBSERVATION_IMAGE:
             self.img_size = img_size
         self.object_opacity = 0.8
@@ -350,6 +351,9 @@ class Pick_And_Place(Task):
         # Clear our score
         self.score = 0.0
 
+        # Clear object dropped successfully
+        self.success_objects_count = 0
+
     def get_obs(self) -> Tuple[np.array, float]:
         """
         Determines if any objects collided, adjusts score and reward accordingly,
@@ -360,12 +364,14 @@ class Pick_And_Place(Task):
             float: The reward for this step.
         """
         reward = 0.0  # Initialize the reward
-        print(self.sim._bodies_idx)
+        # print(self.sim._bodies_idx)
         # Handle floor collisions
         reward += self._handle_floor_collisions()
 
         # Handle goal collisions
-        reward += self._handle_goal_collisions()
+        collisions_reward = self._handle_goal_collisions()
+        reward += collisions_reward
+        # reward += self._handle_goal_collisions()
 
         # Reward for moving towards the closest object
         reward += self._reward_closer_to_object()
@@ -418,8 +424,8 @@ class Pick_And_Place(Task):
                 object = self.goal[object_key]
                 object_id = object.id
                 goal_id = self.sim._bodies_idx[goal]
-                print("Object: ",object.shape)
-                print("Goal ", goal)
+                # print("Object: ",object.shape)
+                # print("Goal ", goal)
                 if self.check_collision(object_id, goal_id):
                     self.sim.physics_client.removeBody(object_id)
                     self.goal[object_key].removed = True
@@ -428,6 +434,7 @@ class Pick_And_Place(Task):
                     if CORRECT_SORTS[goal] == object.shape:
                         reward += DROP_SUCCESS_REWARD
                         print(f"Object {object_key} correctly sorted into {goal}")
+                        self.success_objects_count += 1
                     else:
                         reward += WRONG_DROP_PENALTY
                         print(f"Object {object_key} incorrectly sorted into {goal}")
@@ -720,6 +727,8 @@ class My_Arm_RobotEnv(RobotTaskEnv):
         self.sim.place_visualizer(
             target_position=np.zeros(3), distance=0.9, yaw=45, pitch=-30
         )
+        self.objects_count = objects_count
+        self.success_objects_count = 0
 
     def reset(self) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
         with self.sim.no_rendering():
@@ -727,12 +736,14 @@ class My_Arm_RobotEnv(RobotTaskEnv):
             self.task.reset()
         observation = self._get_obs()
         self.total_score = 0
+        self.success_objects_count = 0
         return observation, None
 
     def _get_obs(self) -> Dict[str, np.ndarray]:
         observation, _ = self.task.get_obs()
         observation = observation.astype(np.float32)
         achieved_goal = self.task.get_achieved_goal().astype(np.float32)
+        self.success_objects_count = self.task.success_objects_count
         return {
             "observation": observation,
             "achieved_goal": achieved_goal,
@@ -861,7 +872,7 @@ def test_fixed_actions():
     for action in fixed_actions:
         for _ in range(50):  # Each action lasts for 50 time steps
             observation, reward, terminated, truncated, info = env.step(action)
-            # print(f"Action: {action}, Reward: {reward}, Terminated: {terminated}")
+            print(f"Action: {action}, Reward: {reward}, Terminated: {terminated}")
             time.sleep(1 / 24)  # Delay for rendering
 
         if terminated or truncated:
