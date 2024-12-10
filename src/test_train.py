@@ -2,10 +2,8 @@ from environment import *
 from model import DiscreteActor, ContinuousActor, Critic
 import torch
 from trainer import Trainer
-
-# MOVE = 0
-# PICK = 1
-# PLACE = 2
+from os import path
+from pathlib import Path
 
 action_space = {
     'discrete': {'Move': 0, 'Pick': 1, 'Place': 2},
@@ -40,5 +38,9 @@ trainer = Trainer(
     max_timesteps_per_episode=10,
     device='cpu'
 )
+
+Path("./training").mkdir(parents=True, exist_ok=True)
+if path.isfile("./training/state.data"):
+    trainer.load("./training")
 
 trainer.train()

@@ -14,11 +14,11 @@ OUTPUT_FILE = "./playback.gif"
 
 env = My_Arm_RobotEnv(
     observation_type=0,
-    objects_count=1,
-    sorting_count=1,
     render_mode="rgb_array",
     renderer="OpenGL",
-    blocker_bar=False
+    blocker_bar=True,
+    objects_count=2,
+    sorting_count=3
 )
 
 action_space = {
@@ -46,7 +46,21 @@ while episode < RECORDING_EPISODE_COUNT:
     episode_length += 1
     if isinstance(observation, Dict):
         observation = observation["observation"]
-    action = actor(observation).sample().detach().numpy()
+    current_discrete_action = discrete_actor(observation).sample().detach().numpy()
+    current_continuous_params = continuous_actor(observation)
+    mean = current_continuous_params[current_discrete_action][
+        'mean']
+    std = current_continuous_params[current_discrete_action][
+        'std']
+    current_continuous_dist = torch.distributions.Normal(mean, std)
+    current_continuous_action = current_continuous_dist.sample()
+    current_continuous_action = current_continuous_action.detach().cpu().numpy()
+
+    action = {
+        'discrete': current_discrete_action,
+        'continuous': current_continuous_action
+    }
+
     observation, reward, terminated, truncated, info = env.step(action)
 
     img = Image.fromarray(env.render())
