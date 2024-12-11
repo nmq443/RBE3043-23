@@ -183,7 +183,8 @@ class Trainer:
         losses = [self.discrete_actor_losses[i] +
                   self.continuous_actor_losses[i] +
                   self.critic_losses[i] for i in range(len(episodes))]
-        plt.plot(episodes, losses)
+        # plt.plot(episodes, losses)
+        ax2.plot(episodes, losses)
         plt.title("Losses per episode")
         plt.ylabel("Loss")
         plt.xlabel("Episode")
