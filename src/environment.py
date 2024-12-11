@@ -690,10 +690,13 @@ class My_Arm_RobotEnv(RobotTaskEnv):
         renderer: str = "OpenGL",
         render_width: int = 720,
         render_height: int = 480,
-        sorting_count: int = 1
+        sorting_count: int = 1,
+        actions: Dict = {}
     ) -> None:
         if observation_type not in [OBSERVATION_IMAGE, OBSERVATION_POSES]:
             raise ValueError("observation_type must be one of either images or poses")
+
+        self.actions = actions
 
         sim = PyBullet(
             render_mode=render_mode,
@@ -736,7 +739,6 @@ class My_Arm_RobotEnv(RobotTaskEnv):
             self.task.reset()
         observation = self._get_obs()
         self.total_score = 0
-        self.success_objects_count = 0
         return observation, None
 
     def _get_obs(self) -> Dict[str, np.ndarray]:
@@ -761,7 +763,13 @@ class My_Arm_RobotEnv(RobotTaskEnv):
         if isinstance(action, dict):
             discrete_action = action["discrete"]
             continuous_action = action["continuous"]
-            self.robot.set_action(continuous_action)
+
+            if discrete_action == self.actions['discrete']['Move']:
+                ee_pos = continuous_action[:-1]
+                force = np.array([0])
+                self.robot.set_action(np.concatenate([ee_pos, force]))
+            else:
+                self.robot.set_action(continuous_action)
 
         self.sim.step()
         observation = self._get_obs()

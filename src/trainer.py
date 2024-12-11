@@ -69,7 +69,7 @@ class Trainer:
         self.discrete_actor_losses: List[float] = []
         self.continuous_actor_losses: List[float] = []
         self.critic_losses: List[float] = []
-        self.success_rate: List[float] = []
+        self.success_rate: List[int] = []
         self.previous_print_length: int = 0
         self.current_action = "Initializing"
         self.last_save: int = 0
@@ -156,11 +156,12 @@ class Trainer:
         trend_data = np.polyfit(episodes, self.total_rewards, 1)
         trendline = np.poly1d(trend_data)
 
-        plt.scatter(
+        fig0, ax0 = plt.subplots()
+        ax0.scatter(
             episodes, self.total_rewards, color="green"
         )  # , linestyle='None', marker='o', color='green')
-        plt.plot(episodes, averages, linestyle="solid", color="red")
-        plt.plot(episodes, trendline(episodes), linestyle="--", color="blue")
+        ax0.plot(episodes, averages, linestyle="solid", color="red")
+        ax0.plot(episodes, trendline(episodes), linestyle="--", color="blue")
 
         if not os.path.exists(f"{filepath}/figs"):
             os.makedirs(f"{filepath}/figs")
@@ -172,7 +173,10 @@ class Trainer:
 
         # Success Rate
         fig1, ax1 = plt.subplots()
-        ax1.plot(episodes, self.success_rate)
+        print(f"Length of self.success_rate: {len(self.success_rate)}")
+        success_rate = [num_success / (self.env.objects_count * len(
+            episodes)) for num_success in self.success_rate]
+        ax1.plot(episodes, success_rate)
         plt.title("Success rate per episode")
         plt.ylabel("Success Rate")
         plt.xlabel("Episode")
@@ -180,11 +184,9 @@ class Trainer:
 
         # Losses
         fig2, ax2 = plt.subplots()
-        losses = [self.discrete_actor_losses[i] +
-                  self.continuous_actor_losses[i] +
-                  self.critic_losses[i] for i in range(len(episodes))]
-        # plt.plot(episodes, losses)
-        ax2.plot(episodes, losses)
+        losses = np.array(self.discrete_actor_losses) + np.array(
+            self.continuous_actor_losses) + np.array(self.critic_losses)
+        ax2.plot(episodes, losses, linestyle="solid")
         plt.title("Losses per episode")
         plt.ylabel("Loss")
         plt.xlabel("Episode")
@@ -196,6 +198,8 @@ class Trainer:
         save will save the models, state, and any additional
         data to the given directory
         """
+        if not os.path.exists(directory):
+            os.mkdir(directory)
         self.last_save = self.current_timestep
 
         self.discrete_actor.save(f"{directory}/discrete_actor.pth")
@@ -334,7 +338,7 @@ class Trainer:
         # Get the terminal reward and record for status tracking
         self.total_rewards.append(sum(rewards))
         self.num_success = self.env.success_objects_count
-        self.success_rate.append(self.num_success / self.env.objects_count)
+        self.success_rate.append(self.num_success)
 
         return (observations, discrete_actions, continuous_params,
                 discrete_log_probs, continuous_log_probs, discounted_rewards)
