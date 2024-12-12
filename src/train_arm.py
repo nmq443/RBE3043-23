@@ -34,9 +34,9 @@ trainer = Trainer(
     discrete_actor=d_actor,
     continuous_actor=c_actor,
     critic=critic,
-    timesteps=20_000_000,
-    timesteps_per_batch=5_000,
-    max_timesteps_per_episode=750,
+    timesteps=2500,
+    timesteps_per_batch=20,
+    max_timesteps_per_episode=75,
 )
 
 Path("./training").mkdir(parents=True, exist_ok=True)

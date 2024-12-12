@@ -21,7 +21,7 @@ class Trainer:
             timesteps: int,
             timesteps_per_batch: int,
             max_timesteps_per_episode: int,
-            training_cycles_per_batch: int = 5,
+            # training_cycles_per_batch: int = 5,
             gamma: float = 0.99,
             epsilon: float = 0.2,
             alpha: float = 3e-4,
@@ -52,7 +52,7 @@ class Trainer:
         self.current_timestep = 0
         self.max_timesteps_per_episode = max_timesteps_per_episode
         self.timesteps_per_batch = timesteps_per_batch
-        self.training_cycles_per_batch = training_cycles_per_batch
+        # self.training_cycles_per_batch = training_cycles_per_batch
         self.save_every_x_timesteps = save_every_x_timesteps
 
         # Optimizers
@@ -175,7 +175,7 @@ class Trainer:
         fig1, ax1 = plt.subplots()
         success_rate = [num_success / (self.env.objects_count * len(
             episodes)) for num_success in self.success_rate]
-        ax1.plot(episodes, success_rate)
+        ax1.plot(success_rate)
         plt.title("Success rate per episode")
         plt.ylabel("Success Rate")
         plt.xlabel("Episode")
@@ -185,10 +185,15 @@ class Trainer:
         fig2, ax2 = plt.subplots()
         losses = np.array(self.discrete_actor_losses) + np.array(
             self.continuous_actor_losses) + np.array(self.critic_losses)
-        ax2.plot(episodes, losses, linestyle="solid")
+        
+        print(f"Loss's shape: {len(losses)}")
+        print(f"Success rate's shape: {len(success_rate)}")
+        print(f"Episodes's shape: {len(episodes)}")
+
+        ax2.plot(losses, linestyle="solid")
         plt.title("Losses per episode")
         plt.ylabel("Loss")
-        plt.xlabel("Episode")
+        plt.xlabel("Timesteps")
         plt.savefig(f"{filepath}/figs/losses.png")
 
 
@@ -216,7 +221,6 @@ class Trainer:
             "γ": self.gamma,
             "ε": self.epsilon,
             "α": self.alpha,
-            "training_cycles_per_batch": self.training_cycles_per_batch,
             "total_rewards": self.total_rewards,
             "terminal_timesteps": self.terminal_timesteps,
             "discrete_actor_losses": self.discrete_actor_losses,
@@ -252,7 +256,7 @@ class Trainer:
         self.gamma = data["γ"]
         self.epsilon = data["ε"]
         self.alpha = data["α"]
-        self.training_cycles_per_batch = data["training_cycles_per_batch"]
+        # self.training_cycles_per_batch = data["training_cycles_per_batch"]
 
         # Memory
         self.total_rewards = data["total_rewards"]
@@ -491,8 +495,6 @@ class Trainer:
 
             # Convert to tensors
             observations = torch.stack(observations, dim=0)
-            # observations = torch.tensor(observations, dtype=torch.float32,
-            #                             device=self.device)
             discrete_actions = torch.tensor(np.array(discrete_actions),
                                             dtype=torch.float32,
                                             device=self.device)
@@ -509,6 +511,7 @@ class Trainer:
                                    device=self.device)
 
             # Perform training steps
+            '''
             for c in range(self.training_cycles_per_batch):
                 self.current_action = (
                     f"Training cycle {c+1}/{self.training_cycles_per_batch}"
@@ -523,7 +526,20 @@ class Trainer:
                 self.discrete_actor_losses.append(discrete_loss)
                 self.continuous_actor_losses.append(continuous_loss)
                 self.critic_losses.append(critic_loss)
+            '''
+            # self.current_action = (
+            #     f"Training cycle {c+1}/{self.training_cycles_per_batch}"
+            # )
+            self.print_status()
+            # Calculate losses
+            normalized_advantage = self.calculate_normalized_advantage(
+                observations, rewards)
+            discrete_loss, continuous_loss, critic_loss = self.training_step(
+                observations, discrete_actions, continuous_actions, discrete_log_probabilities, continuous_log_probabilities, rewards, normalized_advantage)
 
+            self.discrete_actor_losses.append(discrete_loss)
+            self.continuous_actor_losses.append(continuous_loss)
+            self.critic_losses.append(critic_loss)
             # Every x timesteps, save current status
             if self.current_timestep - self.last_save >= self.save_every_x_timesteps:
                 self.current_action = "Saving"
