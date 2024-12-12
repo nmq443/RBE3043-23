@@ -43,3 +43,4 @@ Path("./training").mkdir(parents=True, exist_ok=True)
 if path.isfile("./training/state.data"):
     trainer.load("./training")
 trainer.train()
+trainer.env.close()
