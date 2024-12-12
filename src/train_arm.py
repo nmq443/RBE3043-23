@@ -18,7 +18,8 @@ env = My_Arm_RobotEnv(
     render_mode='human',
     blocker_bar=True,
     objects_count=1,
-    sorting_count=1
+    sorting_count=1,
+    actions=action_space
 )
 
 obs, _ = env.reset()
@@ -33,7 +34,7 @@ trainer = Trainer(
     discrete_actor=d_actor,
     continuous_actor=c_actor,
     critic=critic,
-    timesteps=2_000_000,
+    timesteps=20_000_000,
     timesteps_per_batch=5_000,
     max_timesteps_per_episode=750,
 )
