@@ -159,7 +159,7 @@ class Trainer:
         fig0, ax0 = plt.subplots()
         ax0.scatter(
             episodes, self.total_rewards, color="green"
-        )  # , linestyle='None', marker='o', color='green')
+        )
         ax0.plot(episodes, averages, linestyle="solid", color="red")
         ax0.plot(episodes, trendline(episodes), linestyle="--", color="blue")
 
@@ -173,7 +173,6 @@ class Trainer:
 
         # Success Rate
         fig1, ax1 = plt.subplots()
-        print(f"Length of self.success_rate: {len(self.success_rate)}")
         success_rate = [num_success / (self.env.objects_count * len(
             episodes)) for num_success in self.success_rate]
         ax1.plot(episodes, success_rate)
