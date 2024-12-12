@@ -17,8 +17,9 @@ env = My_Arm_RobotEnv(
     observation_type=0,
     render_mode='human',
     blocker_bar=True,
-    objects_count=2,
-    sorting_count=2
+    objects_count=1,
+    sorting_count=1,
+    actions=action_space,
 )
 
 obs, _ = env.reset()
@@ -36,11 +37,10 @@ trainer = Trainer(
     timesteps=200,
     timesteps_per_batch=50,
     max_timesteps_per_episode=10,
-    device='cpu'
 )
 
-Path("./training").mkdir(parents=True, exist_ok=True)
-if path.isfile("./training/state.data"):
-    trainer.load("./training")
+# Path("./training").mkdir(parents=True, exist_ok=True)
+# if path.isfile("./training/state.data"):
+#     trainer.load("./training")
 
 trainer.train()
