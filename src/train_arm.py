@@ -15,7 +15,7 @@ continuous_dim = action_space['continuous']
 
 env = My_Arm_RobotEnv(
     observation_type=0,
-    render_mode='human',
+    render_mode='rgb_array',
     blocker_bar=True,
     objects_count=1,
     sorting_count=1,
