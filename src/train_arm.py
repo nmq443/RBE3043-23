@@ -34,7 +34,7 @@ trainer = Trainer(
     discrete_actor=d_actor,
     continuous_actor=c_actor,
     critic=critic,
-    timesteps=4_000_000,
+    timesteps=3_500_000,
     timesteps_per_batch=5_000,
     max_timesteps_per_episode=750,
 )
