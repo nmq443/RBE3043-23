@@ -191,9 +191,9 @@ class Trainer:
         print(f"Episodes's shape: {len(episodes)}")
 
         ax2.plot(losses, linestyle="solid")
-        plt.title("Losses per episode")
+        plt.title("Losses per batch")
         plt.ylabel("Loss")
-        plt.xlabel("Timesteps")
+        plt.xlabel("Batch")
         plt.savefig(f"{filepath}/figs/losses.png")
 
 
