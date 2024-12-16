@@ -12,13 +12,19 @@ DISCRETE_MODEL_PATH = "./training/discrete_actor.pth"
 CONTINUOUS_MODEL_PATH = "./training/continuous_actor.pth"
 OUTPUT_FILE = "./playback.gif"
 
+action_space = {
+    'discrete': {'Move': 0, 'Pick': 1, 'Place': 2},
+    'continuous': [4, 4, 4]
+}
+
 env = My_Arm_RobotEnv(
     observation_type=0,
     render_mode="rgb_array",
     renderer="OpenGL",
     blocker_bar=True,
-    objects_count=2,
-    sorting_count=3
+    objects_count=1,
+    sorting_count=1,
+    actions=action_space,
 )
 
 action_space = {
@@ -63,8 +69,10 @@ while episode < RECORDING_EPISODE_COUNT:
 
     observation, reward, terminated, truncated, info = env.step(action)
 
+    '''
     img = Image.fromarray(env.render())
     frames.append(img)
+    '''
 
     if episode_length >= FPS * MAX_EPISODE_LENGTH_SECONDS:
         terminated = True
@@ -76,6 +84,7 @@ while episode < RECORDING_EPISODE_COUNT:
 
 env.close()
 
+'''
 Image.new('RGB', frames[0].size).save(
     fp=OUTPUT_FILE,
     format='GIF',
@@ -84,3 +93,4 @@ Image.new('RGB', frames[0].size).save(
     duration=FRAME_DELAY*len(frames),
     loop=0,
 )
+'''
